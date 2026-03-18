@@ -1,0 +1,20 @@
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+int   = @{ ASCII_DIGIT+ }
+string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+WHITESPACE   = _{ " " | "\t" | "\r" | "\n" | "\r\n" }
+
+line_comment = @{ ("#" | "//") ~ (!NEWLINE ~ ANY)* }
+
+MESSAGE    = { "message" }
+INT32_KW   = { "int32" }
+STRING_KW  = { "string" }
+
+ptype    = { INT32_KW | STRING_KW | ident }
+value    = { string | ident | int }
+repeated = { "repeated" }
+optional = { "optional" }
+
+field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ "=" ~ int ~ ";" }
+message     = { line_comment* ~ MESSAGE ~ ident ~ "{" ~ field* ~ "}" }
+messages    = { SOI ~ message* }
