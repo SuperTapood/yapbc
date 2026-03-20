@@ -6,9 +6,6 @@ pub struct Comments {
 }
 
 impl Comments {
-    pub fn new(comments: Vec<String>) -> Comments {
-        Comments { comments }
-    }
     pub fn parse(mut records: Pairs<Rule>) -> (Comments, Pairs<Rule>) {
         let mut comments = Vec::new();
         let mut value = records.peek().unwrap();
@@ -31,7 +28,7 @@ impl Comments {
     pub fn python_compile(&self) -> String {
         let mut out = String::new();
         if self.comments.is_empty() {
-            return out
+            return out;
         }
         out.push_str("    \"\"\"\n");
 
@@ -40,6 +37,18 @@ impl Comments {
         }
 
         out.push_str("    \"\"\"\n\n");
+
+        out
+    }
+
+    pub fn python_oneliner(&self) -> String {
+        let mut out = String::new();
+        if self.comments.is_empty() {
+            return String::from("-");
+        }
+        for comment in &self.comments {
+            out.push_str(format!("{} ", comment).as_str());
+        }
 
         out
     }

@@ -1,5 +1,4 @@
-ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-int   = @{ ASCII_DIGIT+ }
+ident = @{ (ASCII_ALPHA | "_" | "'" | "\"") ~ (ASCII_ALPHANUMERIC | "_" | "'" | "\"")* }int   = @{ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 WHITESPACE   = _{ " " | "\t" | "\r" | "\n" | "\r\n" }
@@ -14,7 +13,8 @@ ptype    = { INT32_KW | STRING_KW | ident }
 value    = { string | ident | int }
 repeated = { "repeated" }
 optional = { "optional" }
+default  = { "default" ~ ident }
 
-field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ "=" ~ int ~ ";" }
+field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ default? ~ "=" ~ int ~ ";" }
 message     = { line_comment* ~ MESSAGE ~ ident ~ "{" ~ field* ~ "}" }
 messages    = { SOI ~ message* }

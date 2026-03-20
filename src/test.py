@@ -2,8 +2,9 @@
 # sources: TO BE ADDED
 # This file has been @generated
 
-from typing import List
 from dataclasses import dataclass
+from typing import List, Optional
+
 import betterproto2
 
 default_message_pool = betterproto2.MessagePool()
@@ -17,22 +18,57 @@ __all__ = (
     "Pod",
 )
 
+
 @dataclass(
     kw_only=True,
-    frozen=True,
+    init=False,
     eq=False,
     repr=False,
 )
 class Container(betterproto2.Message):
     name: str = betterproto2.field(1, betterproto2.TYPE_STRING, repeated=False, optional=False)
+    """
+    name
+    """
+
     image: str = betterproto2.field(2, betterproto2.TYPE_STRING, repeated=False, optional=False)
-    ports: List[int] = betterproto2.field(3, betterproto2.TYPE_INT32, repeated=True, optional=True)
+    """
+    image
+    """
+
+    ports: Optional[List[int]] = betterproto2.field(3, betterproto2.TYPE_INT32, repeated=True, optional=True)
+    """
+    ports
+    and even more ports
+    """
+
+    def __init__(
+            self,
+            *,
+            name: str,
+            image: str,
+
+            ports: Optional[List[int]] = None,
+
+    ):
+        """
+        :param name: name  
+        :param image: image  
+        :param ports: ports and even more ports  
+        """
+        self.name = name
+        self.image = image
+        self.ports = ports
+
+        self._unknown_fields = b""
+
 
 default_message_pool.register_message("", "Container", Container)
 
+
 @dataclass(
     kw_only=True,
-    frozen=True,
+    init=False,
     eq=False,
     repr=False,
 )
@@ -40,11 +76,29 @@ class VolumeMount(betterproto2.Message):
     name: str = betterproto2.field(1, betterproto2.TYPE_STRING, repeated=False, optional=False)
     mount_path: str = betterproto2.field(2, betterproto2.TYPE_STRING, repeated=False, optional=False)
 
+    def __init__(
+            self,
+            *,
+            name: str,
+            mount_path: str,
+
+    ):
+        """
+        :param name: - 
+        :param mount_path: - 
+        """
+        self.name = name
+        self.mount_path = mount_path
+
+        self._unknown_fields = b""
+
+
 default_message_pool.register_message("", "VolumeMount", VolumeMount)
+
 
 @dataclass(
     kw_only=True,
-    frozen=True,
+    init=False,
     eq=False,
     repr=False,
 )
@@ -52,7 +106,30 @@ class Pod(betterproto2.Message):
     name: str = betterproto2.field(1, betterproto2.TYPE_STRING, repeated=False, optional=False)
     containers: List[Container] = betterproto2.field(2, betterproto2.TYPE_MESSAGE, repeated=True, optional=False)
     mounts: List[VolumeMount] = betterproto2.field(3, betterproto2.TYPE_MESSAGE, repeated=True, optional=False)
-    restart_policy: str = betterproto2.field(4, betterproto2.TYPE_STRING, repeated=False, optional=False)
+    restart_policy: Optional[str] = betterproto2.field(4, betterproto2.TYPE_STRING, repeated=False, optional=True)
+
+    def __init__(
+            self,
+            *,
+            name: str,
+            containers: List[Container],
+            mounts: List[VolumeMount],
+
+            restart_policy: Optional[str] = "Always",
+
+    ):
+        """
+        :param name: - 
+        :param containers: - 
+        :param mounts: - 
+        :param restart_policy: - 
+        """
+        self.name = name
+        self.containers = containers
+        self.mounts = mounts
+        self.restart_policy = restart_policy
+
+        self._unknown_fields = b""
+
 
 default_message_pool.register_message("", "Pod", Pod)
-
