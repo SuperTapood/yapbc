@@ -24,32 +24,4 @@ impl Comments {
 
         (Comments { comments }, records)
     }
-
-    pub fn python_compile(&self) -> String {
-        let mut out = String::new();
-        if self.comments.is_empty() {
-            return out;
-        }
-        out.push_str("    \"\"\"\n");
-
-        for comment in &self.comments {
-            out.push_str(format!("    {}\n", comment).as_str());
-        }
-
-        out.push_str("    \"\"\"\n\n");
-
-        out
-    }
-
-    pub fn python_oneliner(&self) -> String {
-        let mut out = String::new();
-        if self.comments.is_empty() {
-            return String::from("-");
-        }
-        for comment in &self.comments {
-            out.push_str(format!("{} ", comment).as_str());
-        }
-
-        out
-    }
 }

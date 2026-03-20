@@ -15,6 +15,7 @@ repeated = { "repeated" }
 optional = { "optional" }
 default  = { "default" ~ ident }
 
+package     = { "package" ~ "=" ~ ident ~ ";" }
 field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ default? ~ "=" ~ int ~ ";" }
 message     = { line_comment* ~ MESSAGE ~ ident ~ "{" ~ field* ~ "}" }
-messages    = { SOI ~ message* }
+messages    = { SOI ~ package? ~ message* }

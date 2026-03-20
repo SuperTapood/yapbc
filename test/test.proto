@@ -1,0 +1,6 @@
+package = k8s;
+
+message VolumeMount {
+    string name = 1;
+    string mount_path = 2;
+}

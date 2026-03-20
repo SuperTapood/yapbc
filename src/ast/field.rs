@@ -45,7 +45,7 @@ impl Field {
             default = Some(next.into_inner().as_str().parse().unwrap());
             next = record.next().unwrap();
         } else if default.is_some() {
-            default = Some(ptype.python_default());
+            default = Some(ptype.default_python());
         }
 
         let index = next.as_str().parse::<usize>().unwrap();
@@ -53,31 +53,11 @@ impl Field {
         Field { index, repeated, default, comments, name: f_name.to_string(), ptype }
     }
 
-    fn capitalize_first(s: &str) -> String {
+    pub(crate) fn capitalize_first(s: &str) -> String {
         s.chars()
             .take(1)
             .flat_map(|f| f.to_uppercase())
             .chain(s.chars().skip(1))
             .collect()
-    }
-
-    pub fn python_compile(&self) -> (String, String, String) {
-        let mut field_code = String::new();
-        let (mut py_type, msg_type) = self.ptype.python_compile();
-        if self.default.is_some() {
-            py_type = format!("Optional[{}]", py_type);
-        }
-        field_code.push_str(
-            &format!("{}: {} = betterproto2.field({}, betterproto2.{}, repeated={}, optional={})",
-                     self.name,
-                     py_type,
-                     self.index,
-                     msg_type,
-                     Self::capitalize_first(self.repeated.to_string().as_str()),
-                     Self::capitalize_first(self.default.is_some().to_string().as_str())));
-
-        field_code.push_str(format!("\n{}", self.comments.python_compile().as_str()).as_str());
-
-        (field_code, format!("{}: {}", self.name, py_type), self.comments.python_oneliner())
     }
 }
