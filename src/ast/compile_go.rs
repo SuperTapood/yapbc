@@ -1,37 +1,137 @@
+use std::fmt::format;
+use crate::ast::message::{Message, Messages};
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
-use crate::ast::message::Messages;
+use clap::builder::Str;
+use prost::Message as ProstMessage;
+use prost_types::{DescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
+use prost_types::field_descriptor_proto::Label;
+use crate::ast::field::Field;
+use crate::ast::ptype::PType;
+use crate::{generate_go_string, get_proto_type};
+use crate::util::{capitalize_first, pascal_to_snake, snake_to_pascal};
 
-fn to_snake_case(input: &str) -> String {
-    let mut snake = String::new();
 
-    for (i, ch) in input.char_indices() {
-        if ch.is_uppercase() {
-            if i > 0 {
-                snake.push('_');
-            }
-            snake.extend(ch.to_lowercase());
-        } else {
-            snake.push(ch);
+impl PType {
+    pub fn compile_go(&self) -> String {
+        match &self {
+            PType::Int32 => { "int32".parse().unwrap() }
+            PType::RepeatedInt32 => { "[]int32".parse().unwrap() }
+            PType::PString => { "string".parse().unwrap() }
+            PType::RepeatedPString => { "[]string".parse().unwrap() }
+            PType::Custom(n) => { n.as_str().parse().unwrap() }
+            PType::RepeatedCustom(n) => format!("List[{}]", n).as_str().parse().unwrap()
         }
     }
 
-    snake
+    pub fn default_go(&self) -> String {
+        String::from(
+            match &self {
+                PType::Int32 => "0",
+                PType::RepeatedInt32 => "nil",
+                PType::PString => "\"\"",
+                PType::RepeatedPString => "nil",
+                PType::Custom(_) => "nil",
+                PType::RepeatedCustom(_) => "nil",
+            }
+        )
+    }
 }
-impl Messages {
 
-    pub fn compile_go(&self, files: Vec<PathBuf>, output: PathBuf) {
+impl Field {
+    fn add_field_to_desc(
+        &self,
+        msg: &mut DescriptorProto,
+    ) {
+        let mut field = FieldDescriptorProto::default();
+        field.name = Some(self.name.clone());
+        field.number = Some(self.index as i32);
+
+        // Set Label (Repeated vs Optional)
+        field.label = Some(if self.repeated {
+            Label::Repeated as i32
+        } else {
+            Label::Optional as i32
+        });
+
+        field.r#type = Some(get_proto_type(&*self.ptype.to_string()));
+        field.json_name = Some(self.name.clone());
+
+        // If it's a nested message, we must provide the specific type name (e.g., ".Container")
+        // if proto_type == "message" {
+        //     if let Some(tn) = None::<T> {
+        //         field.type_name = Some(tn.to_string());
+        //     }
+        // }
+
+        msg.field.push(field);
+    }
+    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto) -> (String, String) {
+        let name = snake_to_pascal(&*self.name);
+        let str_type  = self.ptype.compile_go();
+        let default = if self.default.is_some() {
+            self.default.clone().unwrap()
+        } else {
+          self.ptype.default_go()
+        };
+        let struct_var = format!("    {name}  {str_type}\n");
+
+        let getter = format!("
+func (x *{message}) Get{name}() {str_type} {{
+    if x != nil {{
+        return x.{name}
+    }}
+    return {default}
+}}
+        ");
+
+        self.add_field_to_desc(desc);
+
+        (struct_var, getter)
+    }
+}
+
+impl Message {
+    pub fn compile_go(&self) -> (String, String, DescriptorProto) {
+        let name = self.name.clone();
+        let mut desc = DescriptorProto::default();
+        desc.name = Some(name.clone());
+        let mut struct_code = format!(
+            "
+
+type {name} struct {{
+    state         protoimpl.MessageState `protogen:\"open.v1\"`
+    unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+"
+        );
+        let mut getters = String::new();
+
+        for field in &self.fields {
+            let (struct_var, getter) = field.compile_go(name.clone(), &mut desc);
+            struct_code.push_str(struct_var.as_str());
+            getters.push_str(getter.as_str());
+        }
+
+        struct_code.push_str("
+}
+        ");
+
+        (struct_code, getters, desc)
+    }
+}
+
+impl Messages {
+    pub fn compile_go(&self, file: PathBuf, output: PathBuf) {
         if self.package.is_empty() {
             println!("no package provided");
             exit(1);
         }
-        println!("package: {}", self.package);
-        for (i, message) in self.messages.iter().enumerate() {
-            let name = message.name.clone();
-            let source_file = files[i].display();
-            let package = self.package.clone();
-            let code = format!("\
+        let source_file = file.to_str().unwrap().to_string();
+        let package = self.package.clone();
+        let mut total_code = String::from(format!(
+            "\
 // Code generated by yapbc. DO NOT EDIT.
 // source: {source_file}
 
@@ -50,19 +150,125 @@ const (
 	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
+)"
+        ));
+        let stem = pascal_to_snake(file.file_stem().and_then(|s| s.to_str()).unwrap());
+        let msg_types = format!("file_{stem}");
+        let mut go_types = String::new();
+        let messages_len = self.messages.len();
+        // 1. Initialize the File Descriptor
+        let mut file_desc = FileDescriptorProto::default();
+        file_desc.name = Some(file.to_str().unwrap().to_string());
+        file_desc.syntax = Some("proto3".to_string());
+
+        // Add Go package options
+        let mut options = FileOptions::default();
+        options.go_package = Some(self.package.to_string());
+        file_desc.options = Some(options);
+        for (i, message) in self.messages.iter().enumerate(){
+            let (struct_code, getters, desc) = message.compile_go();
+            file_desc.message_type.push(desc);
+            let message_name = message.name.clone();
+            total_code.push_str(struct_code.as_str());
+            go_types.push_str(format!("    (*{message_name})(nil), // {i}: {message_name}").as_str());
+            total_code.push_str(format!("
+func (x *{message_name}) Reset() {{
+    *x = {message_name}{{}}
+	mi := &{msg_types}_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}}
+
+func (x *{message_name}) String() string {{
+	return protoimpl.X.MessageStringOf(x)
+}}
+
+func (*{message_name}) ProtoMessage() {{}}
+
+func (x *{message_name}) ProtoReflect() protoreflect.Message {{
+	mi := &{msg_types}_msgTypes[1]
+	if x != nil {{
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {{
+			ms.StoreMessageInfo(mi)
+		}}
+		return ms
+	}}
+	return mi.MessageOf(x)
+}}
+
+// Deprecated: Use {message_name}.ProtoReflect.Descriptor instead.
+func (*{message_name}) Descriptor() ([]byte, []int) {{
+	return {msg_types}_rawDescGZIP(), []int{{1}}
+}}
+
+{getters}
+
+").as_str())
+        }
+        let cap_msg_type = capitalize_first(&*msg_types.clone());
+        let raw_bytes = file_desc.encode_to_vec();
+        let go_code = generate_go_string(&raw_bytes, "file_k8s_pod_proto_rawDesc");
+        total_code.push_str(format!("\
+var {cap_msg_type} protoreflect.FileDescriptor
+
+{go_code}
+
+var (
+    {msg_types}_rawDescOnce sync.Once
+    {msg_types}_rawDescData []byte
 )
 
-type {name} struct {{
-    state         protoimpl.MessageState `protogen:\"open.v1\"`
-
-    unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+func {msg_types}_rawDescGZIP() []byte {{
+	{msg_types}_rawDescOnce.Do(func() {{
+		{msg_types}_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData({msg_types}_rawDesc), len({msg_types}_rawDesc)))
+	}})
+	return {msg_types}_rawDescData
 }}
-            ", );
 
-            let mut filename = output.clone();
-            filename.push(format!("{}.pb.go", to_snake_case(&*message.name)));
-            fs::write(&filename, &code).unwrap();
-        }
+var {msg_types}_msgTypes = make([]protoimpl.MessageInfo, 3)
+var {msg_types}_goTypes = []any{{
+{go_types}
+}}
+var {msg_types}_depIdxs = []int32{{
+	0, // 0: Pod.containers:type_name -> Container
+	1, // 1: Pod.mounts:type_name -> VolumeMount
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
+}}
+
+func init() {{ {msg_types}_init() }}
+func {msg_types}_init() {{
+	if {cap_msg_type} != nil {{
+		return
+	}}
+	type x struct{{}}
+	out := protoimpl.TypeBuilder{{
+		File: protoimpl.DescBuilder{{
+			GoPackagePath: reflect.TypeOf(x{{}}).PkgPath(),
+			RawDescriptor: unsafe.Slice(unsafe.StringData({msg_types}_rawDesc), len({msg_types}_rawDesc)),
+			NumEnums:      0,
+			NumMessages:   {messages_len},
+			NumExtensions: 0,
+			NumServices:   0,
+		}},
+		GoTypes:           {msg_types}_goTypes,
+		DependencyIndexes: {msg_types}_depIdxs,
+		MessageInfos:      {msg_types}_msgTypes,
+	}}.Build()
+	{cap_msg_type} = out.File
+	{msg_types}_goTypes = nil
+	{msg_types}_depIdxs = nil
+}}
+        ").as_str());
+
+        let mut filename = output.clone();
+        filename.push(format!(
+            "{stem}.pb.go",
+        ));
+        fs::write(&filename, &total_code).unwrap();
     }
 }

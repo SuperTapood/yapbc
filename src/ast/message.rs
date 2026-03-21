@@ -1,14 +1,13 @@
-use std::process::{exit};
 use crate::ast::comments::Comments;
 use crate::ast::field::Field;
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
+use std::process::exit;
 
 #[derive(Parser)]
 #[grammar = "proto.pest"]
 pub struct ProtoParser;
-
 
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -35,11 +34,15 @@ impl Message {
                 Rule::field => {
                     fields.push(Field::parse(record));
                 }
-                _ => ()
+                _ => (),
             }
         }
 
-        Message { name, fields, comments: Comments { comments } }
+        Message {
+            name,
+            fields,
+            comments: Comments { comments },
+        }
     }
 }
 
@@ -53,7 +56,8 @@ impl Messages {
     pub fn parse(data: String) -> Messages {
         let successful_parse = ProtoParser::parse(Rule::messages, &data)
             .expect("unsuccessful parse")
-            .next().unwrap();
+            .next()
+            .unwrap();
 
         let inner = successful_parse.into_inner();
 
@@ -66,7 +70,7 @@ impl Messages {
                 Rule::message => {
                     messages.push(Message::parse(record));
                     found_message = true;
-                },
+                }
                 Rule::package => {
                     package = record.into_inner().as_str().to_string();
                 }

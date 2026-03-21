@@ -36,7 +36,6 @@ impl Field {
             PType::parse(next)
         };
 
-
         let f_name = record.next().unwrap().as_str();
 
         next = record.next().unwrap();
@@ -50,14 +49,13 @@ impl Field {
 
         let index = next.as_str().parse::<usize>().unwrap();
 
-        Field { index, repeated, default, comments, name: f_name.to_string(), ptype }
-    }
-
-    pub(crate) fn capitalize_first(s: &str) -> String {
-        s.chars()
-            .take(1)
-            .flat_map(|f| f.to_uppercase())
-            .chain(s.chars().skip(1))
-            .collect()
+        Field {
+            index,
+            repeated,
+            default,
+            comments,
+            name: f_name.to_string(),
+            ptype,
+        }
     }
 }

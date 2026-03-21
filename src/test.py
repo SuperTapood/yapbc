@@ -2,8 +2,9 @@
 # sources: test.proto
 # This file has been @generated
 
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
+
 import betterproto2
 
 default_message_pool = betterproto2.MessagePool()
@@ -16,6 +17,7 @@ __all__ = (
     "VolumeMount",
     "Pod",
 )
+
 
 @dataclass(
     kw_only=True,
@@ -40,14 +42,13 @@ class Container(betterproto2.Message):
     and even more ports
     """
 
-
     def __init__(
-        self,
-        *,
-        name: str, 
-        image: str, 
+            self,
+            *,
+            name: str,
+            image: str,
 
-        ports: Optional[List[int]] = None, 
+            ports: Optional[List[int]] = None,
 
     ):
         """
@@ -60,8 +61,10 @@ class Container(betterproto2.Message):
         self.ports = ports
 
         self._unknown_fields = b""
-        
+
+
 default_message_pool.register_message("", "Container", Container)
+
 
 @dataclass(
     kw_only=True,
@@ -74,11 +77,10 @@ class VolumeMount(betterproto2.Message):
     mount_path: str = betterproto2.field(2, betterproto2.TYPE_STRING, repeated=False, optional=False)
 
     def __init__(
-        self,
-        *,
-        name: str, 
-        mount_path: str, 
-
+            self,
+            *,
+            name: str,
+            mount_path: str,
 
     ):
         """
@@ -89,8 +91,10 @@ class VolumeMount(betterproto2.Message):
         self.mount_path = mount_path
 
         self._unknown_fields = b""
-        
+
+
 default_message_pool.register_message("", "VolumeMount", VolumeMount)
+
 
 @dataclass(
     kw_only=True,
@@ -105,13 +109,13 @@ class Pod(betterproto2.Message):
     restart_policy: Optional[str] = betterproto2.field(4, betterproto2.TYPE_STRING, repeated=False, optional=True)
 
     def __init__(
-        self,
-        *,
-        name: str, 
-        containers: List[Container], 
-        mounts: List[VolumeMount], 
+            self,
+            *,
+            name: str,
+            containers: List[Container],
+            mounts: List[VolumeMount],
 
-        restart_policy: Optional[str] = "Always", 
+            restart_policy: Optional[str] = "Always",
 
     ):
         """
@@ -126,6 +130,6 @@ class Pod(betterproto2.Message):
         self.restart_policy = restart_policy
 
         self._unknown_fields = b""
-        
-default_message_pool.register_message("", "Pod", Pod)
 
+
+default_message_pool.register_message("", "Pod", Pod)

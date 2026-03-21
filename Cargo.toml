@@ -7,3 +7,5 @@ edition = "2024"
 clap = { version = "4.6.0", features = ["derive"] }
 pest = "2.7"
 pest_derive = "2.7"
+prost = "0.14.3"
+prost-types = "0.14.3"

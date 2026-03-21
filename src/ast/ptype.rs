@@ -24,12 +24,23 @@ impl PType {
 
     pub fn repeat(&self) -> PType {
         match self {
-            PType::Int32 => { RepeatedInt32 }
-            PType::PString => { RepeatedPString }
-            PType::Custom(other) => { RepeatedCustom(other.to_string()) }
-            _ => { panic!("Unknown repeated type {:?}", self) }
+            PType::Int32 => RepeatedInt32,
+            PType::PString => RepeatedPString,
+            PType::Custom(other) => RepeatedCustom(other.to_string()),
+            _ => {
+                panic!("Unknown repeated type {:?}", self)
+            }
         }
     }
 
-
+    pub fn to_string(&self) -> String {
+        String::from(match &self {
+            PType::Int32 => "int32",
+            RepeatedInt32 => "int32",
+            PType::PString => "string",
+            RepeatedPString => "string",
+            PType::Custom(n) => n,
+            RepeatedCustom(n) => n,
+        })
+    }
 }
