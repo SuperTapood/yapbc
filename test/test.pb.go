@@ -18,29 +18,87 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type VolumeMount struct {
-    state         protoimpl.MessageState `protogen:"open.v1"`
+type SecretData struct {
+    state         protoimpl.MessageState
     unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
-    Name  string
-    MountPath  string
+    Key  string
+    Value  string
 
 }
         
-func (x *VolumeMount) Reset() {
-    *x = VolumeMount{}
-	mi := &file_test_msgTypes[2]
+func (x *SecretData) Reset() {
+    *x = SecretData{}
+	mi := &file_test_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *VolumeMount) String() string {
+func (x *SecretData) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*VolumeMount) ProtoMessage() {}
+func (*SecretData) ProtoMessage() {}
 
-func (x *VolumeMount) ProtoReflect() protoreflect.Message {
+func (x *SecretData) ProtoReflect() protoreflect.Message {
+	mi := &file_test_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecretData.ProtoReflect.Descriptor instead.
+func (*SecretData) Descriptor() ([]byte, []int) {
+	return file_test_rawDescGZIP(), []int{0}
+}
+
+
+func (x *SecretData) GetKey() string {
+    if x != nil {
+        return x.Key
+    }
+    return ""
+}
+        
+func (x *SecretData) GetValue() string {
+    if x != nil {
+        return x.Value
+    }
+    return ""
+}
+        
+
+
+
+type Secret struct {
+    state         protoimpl.MessageState
+    unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+    Name  string
+    Data  []*SecretData
+    Type  string
+
+}
+        
+func (x *Secret) Reset() {
+    *x = Secret{}
+	mi := &file_test_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Secret) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Secret) ProtoMessage() {}
+
+func (x *Secret) ProtoReflect() protoreflect.Message {
 	mi := &file_test_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -52,22 +110,29 @@ func (x *VolumeMount) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VolumeMount.ProtoReflect.Descriptor instead.
-func (*VolumeMount) Descriptor() ([]byte, []int) {
+// Deprecated: Use Secret.ProtoReflect.Descriptor instead.
+func (*Secret) Descriptor() ([]byte, []int) {
 	return file_test_rawDescGZIP(), []int{1}
 }
 
 
-func (x *VolumeMount) GetName() string {
+func (x *Secret) GetName() string {
     if x != nil {
         return x.Name
     }
     return ""
 }
         
-func (x *VolumeMount) GetMountPath() string {
+func (x *Secret) GetData() []*SecretData {
     if x != nil {
-        return x.MountPath
+        return x.Data
+    }
+    return nil
+}
+        
+func (x *Secret) GetType() string {
+    if x != nil {
+        return x.Type
     }
     return ""
 }
@@ -76,9 +141,16 @@ func (x *VolumeMount) GetMountPath() string {
 var File_test protoreflect.FileDescriptor
 
 const file_k8s_pod_proto_rawDesc = "" +
-    "\n\x0ftest/test.proto\"A\n\x0bVolumeMount\x12\x12\n\x04name" +
-    "\x18\x01 \x01(\tR\x04name\x12\x1e\n\nmount_path\x18\x02 \x01(\tR\nmount_" +
-    "pathB\x05Z\x03k8sb\x06proto3"
+	"\n" +
+	"\x0ftest/test.proto\"4\n" +
+	"\n" +
+	"SecretData\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"Q\n" +
+	"\x06Secret\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\x04data\x18\x02 \x03(\t2\v.SecretDataR\x04data\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04typeB\x05Z\x03k8sb\x06proto3"
 
 var (
     file_test_rawDescOnce sync.Once
@@ -94,16 +166,17 @@ func file_test_rawDescGZIP() []byte {
 
 var file_test_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_test_goTypes = []any{
-    (*VolumeMount)(nil), // 0: VolumeMount
+    (*SecretData)(nil), // 0: SecretData
+    (*Secret)(nil), // 1: Secret
+
 }
 var file_test_depIdxs = []int32{
-	0, // 0: Pod.containers:type_name -> Container
-	1, // 1: Pod.mounts:type_name -> VolumeMount
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+    0, // 0: Secret.secretdata:type_name -> SecretData
+    1, // [1:1] is the sub-list for method output_type
+    1, // [1:1] is the sub-list for method input_type
+    1, // [1:1] is the sub-list for extension type_name
+    1, // [1:1] is the sub-list for extension extendee
+    0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_test_init() }
@@ -117,7 +190,7 @@ func file_test_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_test_rawDesc), len(file_test_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

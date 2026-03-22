@@ -1,16 +1,13 @@
-use std::fmt::format;
+use crate::ast::field::Field;
 use crate::ast::message::{Message, Messages};
+use crate::ast::ptype::PType;
+use crate::util::{capitalize_first, pascal_to_snake, snake_to_pascal};
+use prost::Message as ProstMessage;
+use prost_types::field_descriptor_proto::{Label, Type};
+use prost_types::{DescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
-use clap::builder::Str;
-use prost::Message as ProstMessage;
-use prost_types::{DescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
-use prost_types::field_descriptor_proto::Label;
-use crate::ast::field::Field;
-use crate::ast::ptype::PType;
-use crate::{generate_go_string, get_proto_type};
-use crate::util::{capitalize_first, pascal_to_snake, snake_to_pascal};
 
 
 impl PType {
@@ -21,7 +18,7 @@ impl PType {
             PType::PString => { "string".parse().unwrap() }
             PType::RepeatedPString => { "[]string".parse().unwrap() }
             PType::Custom(n) => { n.as_str().parse().unwrap() }
-            PType::RepeatedCustom(n) => format!("List[{}]", n).as_str().parse().unwrap()
+            PType::RepeatedCustom(n) => format!("[]*{n}").as_str().parse().unwrap()
         }
     }
 
@@ -40,6 +37,22 @@ impl PType {
 }
 
 impl Field {
+    fn get_proto_type(&self, type_name: &str) -> i32 {
+        match type_name {
+            "double" => Type::Double as i32,
+            "float" => Type::Float as i32,
+            "int64" => Type::Int64 as i32,
+            "uint64" => Type::Uint64 as i32,
+            "int32" => Type::Int32 as i32,
+            "fixed64" => Type::Fixed64 as i32,
+            "fixed32" => Type::Fixed32 as i32,
+            "bool" => Type::Bool as i32,
+            "string" => Type::String as i32,
+            "bytes" => Type::Bytes as i32,
+            "message" => Type::Message as i32,
+            _ => Type::String as i32,
+        }
+    }
     fn add_field_to_desc(
         &self,
         msg: &mut DescriptorProto,
@@ -55,25 +68,22 @@ impl Field {
             Label::Optional as i32
         });
 
-        field.r#type = Some(get_proto_type(&*self.ptype.to_string()));
+        field.r#type = Some(self.get_proto_type(&*self.ptype.to_string()));
         field.json_name = Some(self.name.clone());
 
-        // If it's a nested message, we must provide the specific type name (e.g., ".Container")
-        // if proto_type == "message" {
-        //     if let Some(tn) = None::<T> {
-        //         field.type_name = Some(tn.to_string());
-        //     }
-        // }
+        if self.ptype.is_nested() {
+            field.type_name = Some(format!(".{}", self.ptype.to_string()));
+        }
 
         msg.field.push(field);
     }
-    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto) -> (String, String) {
+    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto) -> (String, String, Option<String>) {
         let name = snake_to_pascal(&*self.name);
-        let str_type  = self.ptype.compile_go();
+        let str_type = self.ptype.compile_go();
         let default = if self.default.is_some() {
             self.default.clone().unwrap()
         } else {
-          self.ptype.default_go()
+            self.ptype.default_go()
         };
         let struct_var = format!("    {name}  {str_type}\n");
 
@@ -86,22 +96,28 @@ func (x *{message}) Get{name}() {str_type} {{
 }}
         ");
 
+        let dependency = match &self.ptype {
+            PType::Custom(n) | PType::RepeatedCustom(n) => Some(n.clone()),
+            _ => None,
+        };
+
         self.add_field_to_desc(desc);
 
-        (struct_var, getter)
+        (struct_var, getter, dependency)
     }
 }
 
 impl Message {
-    pub fn compile_go(&self) -> (String, String, DescriptorProto) {
+    pub fn compile_go(&self) -> (String, String, DescriptorProto, Vec<String>) {
         let name = self.name.clone();
         let mut desc = DescriptorProto::default();
+        let mut deps = Vec::new();
         desc.name = Some(name.clone());
         let mut struct_code = format!(
             "
 
 type {name} struct {{
-    state         protoimpl.MessageState `protogen:\"open.v1\"`
+    state         protoimpl.MessageState
     unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 "
@@ -109,20 +125,59 @@ type {name} struct {{
         let mut getters = String::new();
 
         for field in &self.fields {
-            let (struct_var, getter) = field.compile_go(name.clone(), &mut desc);
+            let (struct_var, getter, dep) = field.compile_go(name.clone(), &mut desc);
             struct_code.push_str(struct_var.as_str());
             getters.push_str(getter.as_str());
+            if let Some(d) = dep {
+                deps.push(d);
+            }
         }
 
         struct_code.push_str("
 }
         ");
 
-        (struct_code, getters, desc)
+        (struct_code, getters, desc, deps)
     }
 }
 
 impl Messages {
+    fn generate_go_string(&self, raw_bytes: &[u8], var_name: &str) -> String {
+        let mut go_str_lines = vec![format!("const {} = \"\" +", var_name)];
+
+        let mut current_line = String::from("\t\"");
+
+        for &b in raw_bytes {
+            match b {
+                10 => {
+                    current_line.push_str("\\n");
+                    current_line.push_str("\" +");
+                    go_str_lines.push(current_line);
+                    current_line = String::from("\t\"");
+                }
+                13 => current_line.push_str("\\r"),
+                9 => current_line.push_str("\\t"),
+                11 => current_line.push_str("\\v"),
+                34 => current_line.push_str("\\\""),
+                92 => current_line.push_str("\\\\"),
+                32..=126 => current_line.push(b as char),
+                _ => current_line.push_str(&format!("\\x{:02x}", b)),
+            }
+        }
+
+        if current_line != "\t\"" {
+            current_line.push('"');
+            go_str_lines.push(current_line);
+        } else {
+            if let Some(last_line) = go_str_lines.last_mut() {
+                if last_line.ends_with(" +") {
+                    last_line.truncate(last_line.len() - 2);
+                }
+            }
+        }
+
+        go_str_lines.join("\n")
+    }
     pub fn compile_go(&self, file: PathBuf, output: PathBuf) {
         if self.package.is_empty() {
             println!("no package provided");
@@ -165,16 +220,35 @@ const (
         let mut options = FileOptions::default();
         options.go_package = Some(self.package.to_string());
         file_desc.options = Some(options);
-        for (i, message) in self.messages.iter().enumerate(){
-            let (struct_code, getters, desc) = message.compile_go();
+        let mut message_map = std::collections::HashMap::new();
+        let mut all_deps_as_indices = Vec::new();
+
+        // Pre-map message names to their index in goTypes
+        for (i, msg) in self.messages.iter().enumerate() {
+            message_map.insert(msg.name.clone(), i as i32);
+        }
+
+        let mut total_structs_and_getters = String::new();
+        //let mut go_types_list = String::new();
+        for (i, message) in self.messages.iter().enumerate() {
+            let (struct_code, getters, desc, deps) = message.compile_go();
             file_desc.message_type.push(desc);
+            total_structs_and_getters.push_str(&struct_code);
+            total_structs_and_getters.push_str(&getters);
+            //go_types_list.push_str(&format!("    (*{})(nil), // {}: {}\n", message.name, i, message.name));
+            for dep_name in deps {
+                if let Some(&idx) = message_map.get(&dep_name) {
+                    all_deps_as_indices.push((idx, format!("{}.{}:type_name -> {}", message.name, dep_name.to_lowercase(), dep_name)));
+                }
+            }
+
             let message_name = message.name.clone();
             total_code.push_str(struct_code.as_str());
-            go_types.push_str(format!("    (*{message_name})(nil), // {i}: {message_name}").as_str());
+            go_types.push_str(format!("    (*{message_name})(nil), // {i}: {message_name}\n").as_str());
             total_code.push_str(format!("
 func (x *{message_name}) Reset() {{
     *x = {message_name}{{}}
-	mi := &{msg_types}_msgTypes[2]
+	mi := &{msg_types}_msgTypes[{i}]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }}
@@ -186,7 +260,7 @@ func (x *{message_name}) String() string {{
 func (*{message_name}) ProtoMessage() {{}}
 
 func (x *{message_name}) ProtoReflect() protoreflect.Message {{
-	mi := &{msg_types}_msgTypes[1]
+	mi := &{msg_types}_msgTypes[{i}]
 	if x != nil {{
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {{
@@ -199,16 +273,28 @@ func (x *{message_name}) ProtoReflect() protoreflect.Message {{
 
 // Deprecated: Use {message_name}.ProtoReflect.Descriptor instead.
 func (*{message_name}) Descriptor() ([]byte, []int) {{
-	return {msg_types}_rawDescGZIP(), []int{{1}}
+	return {msg_types}_rawDescGZIP(), []int{{{i}}}
 }}
 
 {getters}
 
 ").as_str())
         }
+        let total_deps_count = all_deps_as_indices.len() as i32;
+        let mut dep_idxs_code = String::from("\n");
+
+        for (i, (idx, comment)) in all_deps_as_indices.iter().enumerate() {
+            dep_idxs_code.push_str(&format!("    {}, // {}: {}\n", idx, i, comment));
+        }
+
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for method output_type\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for method input_type\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for extension type_name\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for extension extendee\n"));
+        dep_idxs_code.push_str(&format!("    0, // [0:{total_deps_count}] is the sub-list for field type_name\n", ));
         let cap_msg_type = capitalize_first(&*msg_types.clone());
         let raw_bytes = file_desc.encode_to_vec();
-        let go_code = generate_go_string(&raw_bytes, "file_k8s_pod_proto_rawDesc");
+        let go_code = self.generate_go_string(&raw_bytes, "file_k8s_pod_proto_rawDesc");
         total_code.push_str(format!("\
 var {cap_msg_type} protoreflect.FileDescriptor
 
@@ -230,15 +316,7 @@ var {msg_types}_msgTypes = make([]protoimpl.MessageInfo, 3)
 var {msg_types}_goTypes = []any{{
 {go_types}
 }}
-var {msg_types}_depIdxs = []int32{{
-	0, // 0: Pod.containers:type_name -> Container
-	1, // 1: Pod.mounts:type_name -> VolumeMount
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
-}}
+var {msg_types}_depIdxs = []int32{{{dep_idxs_code}}}
 
 func init() {{ {msg_types}_init() }}
 func {msg_types}_init() {{

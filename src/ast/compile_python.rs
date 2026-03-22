@@ -3,9 +3,9 @@ use crate::ast::field::Field;
 use crate::ast::message::{Message, Messages};
 use crate::ast::ptype::PType;
 use crate::ast::ptype::PType::{RepeatedCustom, RepeatedInt32, RepeatedPString};
+use crate::util::capitalize_first;
 use std::fs;
 use std::path::PathBuf;
-use crate::util::capitalize_first;
 
 impl PType {
     pub fn compile_python(&self) -> (String, String) {
@@ -105,7 +105,7 @@ impl Message {
                         init,
                         f.default.clone().unwrap().as_str()
                     )
-                    .as_str(),
+                        .as_str(),
                 );
                 variables_with_default_comment.push_str(
                     format!("        :param {}: {} \n", f.name.clone(), comment).as_str(),
@@ -174,7 +174,7 @@ betterproto2.check_compiler_version(_COMPILER_VERSION)
 __all__ = (
 "
             )
-            .as_str(),
+                .as_str(),
         );
 
         for message in &self.messages {
@@ -190,7 +190,7 @@ __all__ = (
                     "default_message_pool.register_message(\"\", \"{}\", {})\n\n",
                     message.name, message.name
                 )
-                .as_str(),
+                    .as_str(),
             );
         }
 

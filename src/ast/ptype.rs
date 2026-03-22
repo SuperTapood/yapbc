@@ -43,4 +43,12 @@ impl PType {
             RepeatedCustom(n) => n,
         })
     }
+
+    pub fn is_nested(&self) -> bool {
+        match self {
+            PType::RepeatedCustom(_) => true,
+            PType::Custom(_) => true,
+            _ => false,
+        }
+    }
 }

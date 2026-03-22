@@ -2,8 +2,8 @@
 # sources: test.proto
 # This file has been @generated
 
-from typing import List, Optional
 from dataclasses import dataclass
+
 import betterproto2
 
 default_message_pool = betterproto2.MessagePool()
@@ -14,6 +14,7 @@ betterproto2.check_compiler_version(_COMPILER_VERSION)
 __all__ = (
     "VolumeMount",
 )
+
 
 @dataclass(
     kw_only=True,
@@ -26,11 +27,10 @@ class VolumeMount(betterproto2.Message):
     mount_path: str = betterproto2.field(2, betterproto2.TYPE_STRING, repeated=False, optional=False)
 
     def __init__(
-        self,
-        *,
-        name: str, 
-        mount_path: str, 
-
+            self,
+            *,
+            name: str,
+            mount_path: str,
 
     ):
         """
@@ -41,6 +41,6 @@ class VolumeMount(betterproto2.Message):
         self.mount_path = mount_path
 
         self._unknown_fields = b""
-        
-default_message_pool.register_message("", "VolumeMount", VolumeMount)
 
+
+default_message_pool.register_message("", "VolumeMount", VolumeMount)
