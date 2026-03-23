@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
+use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "yapbc")]
@@ -73,6 +74,7 @@ fn compile(files: Vec<PathBuf>, output: PathBuf, language: Language) {
 }
 
 fn main() {
+    let start = Instant::now();
     let cli = Cli::parse();
 
     match &cli.command {
@@ -82,4 +84,6 @@ fn main() {
             language,
         } => compile(files.clone(), output.clone(), language.clone()),
     }
+    let duration = start.elapsed();
+    println!("done in {:?}", duration);
 }

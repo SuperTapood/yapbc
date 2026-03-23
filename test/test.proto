@@ -1,12 +1,19 @@
 package = k8s;
 
-message SecretData {
-    string key = 1;
-    string value = 2;
+// not pvc
+enum AccessMode {
+    // read write once
+    ReadWriteOnce = 0;
+    ReadOnlyMany = 1;
+    ReadWriteMany = 2;
+    ReadWriteOncePod = 3;
 }
 
-message Secret {
+
+// pvc
+message VolumeClaimTemplate {
     string name = 1;
-    repeated SecretData data = 2;
-    string type = 3;
+    repeated AccessMode access_modes = 2;
+    string storage_class_name = 3;
+    string storage = 4;
 }

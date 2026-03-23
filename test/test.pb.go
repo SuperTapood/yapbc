@@ -18,88 +18,88 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type SecretData struct {
-    state         protoimpl.MessageState
-    unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-    Key  string
-    Value  string
+type AccessMode int32
 
-}
-        
-func (x *SecretData) Reset() {
-    *x = SecretData{}
-	mi := &file_test_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
+const (
+    AccessMode_ReadWriteOnce    AccessMode = 0;
+    AccessMode_ReadOnlyMany    AccessMode = 1;
+    AccessMode_ReadWriteMany    AccessMode = 2;
+    AccessMode_ReadWriteOncePod    AccessMode = 3;
+)
 
-func (x *SecretData) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
+// Enum value maps for AccessMode
+var (
+    AccessMode_name = map[int32]string{
+        0: "ReadWriteOnce",
+        1: "ReadOnlyMany",
+        2: "ReadWriteMany",
+        3: "ReadWriteOncePod",
+    }
+    AccessMode_value = map[string]int32{
+        "ReadWriteOnce": 0,
+        "ReadOnlyMany": 1,
+        "ReadWriteMany": 2,
+        "ReadWriteOncePod": 3,
+    }
+)
 
-func (*SecretData) ProtoMessage() {}
-
-func (x *SecretData) ProtoReflect() protoreflect.Message {
-	mi := &file_test_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
+func (x AccessMode) Enum() *AccessMode {
+    p := new(AccessMode)
+	*p = x
+	return p
 }
 
-// Deprecated: Use SecretData.ProtoReflect.Descriptor instead.
-func (*SecretData) Descriptor() ([]byte, []int) {
+func (x AccessMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AccessMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_test_enumTypes[0].Descriptor()
+}
+
+func (AccessMode) Type() protoreflect.EnumType {
+	return &file_test_enumTypes[0]
+}
+
+func (x AccessMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AccessMode.Descriptor instead.
+func (AccessMode) EnumDescriptor() ([]byte, []int) {
 	return file_test_rawDescGZIP(), []int{0}
 }
 
-
-func (x *SecretData) GetKey() string {
-    if x != nil {
-        return x.Key
-    }
-    return ""
-}
-        
-func (x *SecretData) GetValue() string {
-    if x != nil {
-        return x.Value
-    }
-    return ""
-}
-        
+var file_test_enumTypes = make([]protoimpl.EnumInfo, 1)
 
 
 
-type Secret struct {
+type VolumeClaimTemplate struct {
     state         protoimpl.MessageState
     unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
     Name  string
-    Data  []*SecretData
-    Type  string
+    AccessModes  []*AccessMode
+    StorageClassName  string
+    Storage  string
 
 }
         
-func (x *Secret) Reset() {
-    *x = Secret{}
-	mi := &file_test_msgTypes[1]
+func (x *VolumeClaimTemplate) Reset() {
+    *x = VolumeClaimTemplate{}
+	mi := &file_test_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Secret) String() string {
+func (x *VolumeClaimTemplate) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Secret) ProtoMessage() {}
+func (*VolumeClaimTemplate) ProtoMessage() {}
 
-func (x *Secret) ProtoReflect() protoreflect.Message {
-	mi := &file_test_msgTypes[1]
+func (x *VolumeClaimTemplate) ProtoReflect() protoreflect.Message {
+	mi := &file_test_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -110,29 +110,36 @@ func (x *Secret) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Secret.ProtoReflect.Descriptor instead.
-func (*Secret) Descriptor() ([]byte, []int) {
-	return file_test_rawDescGZIP(), []int{1}
+// Deprecated: Use VolumeClaimTemplate.ProtoReflect.Descriptor instead.
+func (*VolumeClaimTemplate) Descriptor() ([]byte, []int) {
+	return file_test_rawDescGZIP(), []int{0}
 }
 
 
-func (x *Secret) GetName() string {
+func (x *VolumeClaimTemplate) GetName() string {
     if x != nil {
         return x.Name
     }
     return ""
 }
         
-func (x *Secret) GetData() []*SecretData {
+func (x *VolumeClaimTemplate) GetAccessModes() []*AccessMode {
     if x != nil {
-        return x.Data
+        return x.AccessModes
     }
     return nil
 }
         
-func (x *Secret) GetType() string {
+func (x *VolumeClaimTemplate) GetStorageClassName() string {
     if x != nil {
-        return x.Type
+        return x.StorageClassName
+    }
+    return ""
+}
+        
+func (x *VolumeClaimTemplate) GetStorage() string {
+    if x != nil {
+        return x.Storage
     }
     return ""
 }
@@ -142,15 +149,18 @@ var File_test protoreflect.FileDescriptor
 
 const file_k8s_pod_proto_rawDesc = "" +
 	"\n" +
-	"\x0ftest/test.proto\"4\n" +
+	"\x0ftest/test.proto\"\xa4\x01\n" +
+	"\x13VolumeClaimTemplate\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
+	"\x0caccess_modes\x18\x02 \x03(\x0e2\v.AccessModeR\x0caccess_modes\x12.\n" +
+	"\x12storage_class_name\x18\x03 \x01(\tR\x12storage_class_name\x12\x18\n" +
+	"\x07storage\x18\x04 \x01(\tR\x07storage*Z\n" +
 	"\n" +
-	"SecretData\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"Q\n" +
-	"\x06Secret\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
-	"\x04data\x18\x02 \x03(\t2\v.SecretDataR\x04data\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04typeB\x05Z\x03k8sb\x06proto3"
+	"AccessMode\x12\x11\n" +
+	"\rReadWriteOnce\x10\x00\x12\x10\n" +
+	"\x0cReadOnlyMany\x10\x01\x12\x11\n" +
+	"\rReadWriteMany\x10\x02\x12\x14\n" +
+	"\x10ReadWriteOncePod\x10\x03B\x05Z\x03k8sb\x06proto3"
 
 var (
     file_test_rawDescOnce sync.Once
@@ -164,14 +174,13 @@ func file_test_rawDescGZIP() []byte {
 	return file_test_rawDescData
 }
 
-var file_test_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_test_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_test_goTypes = []any{
-    (*SecretData)(nil), // 0: SecretData
-    (*Secret)(nil), // 1: Secret
-
+    (AccessMode)(0), // 0: AccessMode
+    (*VolumeClaimTemplate)(nil), // 1: VolumeClaimTemplate
 }
 var file_test_depIdxs = []int32{
-    0, // 0: Secret.secretdata:type_name -> SecretData
+    0, // 0: VolumeClaimTemplate.accessmode:type_name -> AccessMode
     1, // [1:1] is the sub-list for method output_type
     1, // [1:1] is the sub-list for method input_type
     1, // [1:1] is the sub-list for extension type_name
@@ -189,14 +198,15 @@ func file_test_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_test_rawDesc), len(file_test_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   2,
+			NumEnums:      1,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_test_goTypes,
 		DependencyIndexes: file_test_depIdxs,
 		MessageInfos:      file_test_msgTypes,
+        EnumInfos:         file_test_enumTypes,
 	}.Build()
 	File_test = out.File
 	file_test_goTypes = nil

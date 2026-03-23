@@ -1,5 +1,6 @@
 use crate::ast::comments::Comments;
 use crate::ast::field::Field;
+use crate::ast::penum::PEnum;
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
@@ -14,10 +15,11 @@ pub struct Message {
     pub name: String,
     pub fields: Vec<Field>,
     pub comments: Comments,
+    pub index: usize,
 }
 
 impl Message {
-    pub fn parse(record: Pair<Rule>) -> Message {
+    pub fn parse(record: Pair<Rule>, index: usize) -> Message {
         let mut name = String::new();
         let mut fields = Vec::new();
         let mut comments = Vec::new();
@@ -42,6 +44,7 @@ impl Message {
             name,
             fields,
             comments: Comments { comments },
+            index,
         }
     }
 }
@@ -50,6 +53,7 @@ impl Message {
 pub struct Messages {
     pub package: String,
     pub messages: Vec<Message>,
+    pub penums: Vec<PEnum>,
 }
 
 impl Messages {
@@ -62,14 +66,25 @@ impl Messages {
         let inner = successful_parse.into_inner();
 
         let mut messages = Vec::new();
+        let mut penums = Vec::new();
         let mut package = String::new();
-        let mut found_message = false;
+        let mut object_counter = 0;
 
         for record in inner {
             match record.as_rule() {
-                Rule::message => {
-                    messages.push(Message::parse(record));
-                    found_message = true;
+                Rule::objects => {
+                    let actual = record.clone().into_inner().next().unwrap();
+                    match actual.as_rule() {
+                        Rule::message => {
+                            messages.push(Message::parse(actual, object_counter));
+                            object_counter = object_counter + 1;
+                        }
+                        Rule::enumeration => {
+                            penums.push(PEnum::parse(actual, object_counter));
+                            object_counter = object_counter + 1;
+                        }
+                        _ => panic!("we should not hit this")
+                    }
                 }
                 Rule::package => {
                     package = record.into_inner().as_str().to_string();
@@ -80,11 +95,11 @@ impl Messages {
             }
         }
 
-        if !found_message {
-            println!("no messages found");
+        if object_counter == 0 {
+            println!("no messages/enums found");
             exit(1);
         }
 
-        Messages { package, messages }
+        Messages { package, messages, penums }
     }
 }

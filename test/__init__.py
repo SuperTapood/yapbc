@@ -3,6 +3,7 @@
 # This file has been @generated
 
 from dataclasses import dataclass
+from typing import List
 
 import betterproto2
 
@@ -12,8 +13,23 @@ _COMPILER_VERSION = "0.9.0"
 betterproto2.check_compiler_version(_COMPILER_VERSION)
 
 __all__ = (
-    "VolumeMount",
+    "VolumeClaimTemplate",
 )
+
+
+class AccessMode(betterproto2.Enum):
+    """
+    not pvc
+    """
+
+    ReadWriteOnce = 0
+    """
+    read write once
+    """
+
+    ReadOnlyMany = 1
+    ReadWriteMany = 2
+    ReadWriteOncePod = 3
 
 
 @dataclass(
@@ -22,25 +38,37 @@ __all__ = (
     eq=False,
     repr=False,
 )
-class VolumeMount(betterproto2.Message):
+class VolumeClaimTemplate(betterproto2.Message):
+    """
+    pvc
+    """
+
     name: str = betterproto2.field(1, betterproto2.TYPE_STRING, repeated=False, optional=False)
-    mount_path: str = betterproto2.field(2, betterproto2.TYPE_STRING, repeated=False, optional=False)
+    access_modes: List[AccessMode] = betterproto2.field(2, betterproto2.TYPE_MESSAGE, repeated=True, optional=False)
+    storage_class_name: str = betterproto2.field(3, betterproto2.TYPE_STRING, repeated=False, optional=False)
+    storage: str = betterproto2.field(4, betterproto2.TYPE_STRING, repeated=False, optional=False)
 
     def __init__(
             self,
             *,
             name: str,
-            mount_path: str,
+            access_modes: List[AccessMode],
+            storage_class_name: str,
+            storage: str,
 
     ):
         """
         :param name: - 
-        :param mount_path: - 
+        :param access_modes: - 
+        :param storage_class_name: - 
+        :param storage: - 
         """
         self.name = name
-        self.mount_path = mount_path
+        self.access_modes = access_modes
+        self.storage_class_name = storage_class_name
+        self.storage = storage
 
         self._unknown_fields = b""
 
 
-default_message_pool.register_message("", "VolumeMount", VolumeMount)
+default_message_pool.register_message("", "VolumeClaimTemplate", VolumeClaimTemplate)

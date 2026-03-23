@@ -4,11 +4,10 @@ use crate::ast::ptype::PType;
 use crate::util::{capitalize_first, pascal_to_snake, snake_to_pascal};
 use prost::Message as ProstMessage;
 use prost_types::field_descriptor_proto::{Label, Type};
-use prost_types::{DescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
+use prost_types::{DescriptorProto, EnumDescriptorProto, EnumValueDescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
-
 
 impl PType {
     pub fn compile_go(&self) -> String {
@@ -56,6 +55,7 @@ impl Field {
     fn add_field_to_desc(
         &self,
         msg: &mut DescriptorProto,
+        is_enum: bool,
     ) {
         let mut field = FieldDescriptorProto::default();
         field.name = Some(self.name.clone());
@@ -68,7 +68,12 @@ impl Field {
             Label::Optional as i32
         });
 
-        field.r#type = Some(self.get_proto_type(&*self.ptype.to_string()));
+        field.r#type = Some(match &self.ptype {
+            PType::Custom(_) | PType::RepeatedCustom(_) => {
+                if is_enum { 14 } else { 11 } // 14 = Enum, 11 = Message
+            }
+            _ => self.get_proto_type(&*self.ptype.to_string()),
+        });
         field.json_name = Some(self.name.clone());
 
         if self.ptype.is_nested() {
@@ -77,7 +82,7 @@ impl Field {
 
         msg.field.push(field);
     }
-    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto) -> (String, String, Option<String>) {
+    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto, enum_types: &Vec<String>) -> (String, String, Option<String>) {
         let name = snake_to_pascal(&*self.name);
         let str_type = self.ptype.compile_go();
         let default = if self.default.is_some() {
@@ -101,14 +106,23 @@ func (x *{message}) Get{name}() {str_type} {{
             _ => None,
         };
 
-        self.add_field_to_desc(desc);
+        let mut is_enum = false;
+        let (typ, _) = self.ptype.compile_python();
+
+        for enum_type in enum_types {
+            if enum_type.eq(&typ) || format!("List[{enum_type}]").eq(&typ) {
+                is_enum = true;
+            }
+        }
+
+        self.add_field_to_desc(desc, is_enum);
 
         (struct_var, getter, dependency)
     }
 }
 
 impl Message {
-    pub fn compile_go(&self) -> (String, String, DescriptorProto, Vec<String>) {
+    pub fn compile_go(&self, enum_types: &Vec<String>) -> (String, String, DescriptorProto, Vec<String>) {
         let name = self.name.clone();
         let mut desc = DescriptorProto::default();
         let mut deps = Vec::new();
@@ -125,7 +139,7 @@ type {name} struct {{
         let mut getters = String::new();
 
         for field in &self.fields {
-            let (struct_var, getter, dep) = field.compile_go(name.clone(), &mut desc);
+            let (struct_var, getter, dep) = field.compile_go(name.clone(), &mut desc, enum_types);
             struct_code.push_str(struct_var.as_str());
             getters.push_str(getter.as_str());
             if let Some(d) = dep {
@@ -210,7 +224,6 @@ const (
         let stem = pascal_to_snake(file.file_stem().and_then(|s| s.to_str()).unwrap());
         let msg_types = format!("file_{stem}");
         let mut go_types = String::new();
-        let messages_len = self.messages.len();
         // 1. Initialize the File Descriptor
         let mut file_desc = FileDescriptorProto::default();
         file_desc.name = Some(file.to_str().unwrap().to_string());
@@ -223,15 +236,102 @@ const (
         let mut message_map = std::collections::HashMap::new();
         let mut all_deps_as_indices = Vec::new();
 
+        for penum in self.penums.iter() {
+            message_map.insert(penum.name.clone(), penum.index);
+        };
+
         // Pre-map message names to their index in goTypes
-        for (i, msg) in self.messages.iter().enumerate() {
-            message_map.insert(msg.name.clone(), i as i32);
-        }
+        for msg in self.messages.iter() {
+            message_map.insert(msg.name.clone(), msg.index);
+        };
 
         let mut total_structs_and_getters = String::new();
         //let mut go_types_list = String::new();
+
+        let penums = self.penums.len();
+        let messages = self.messages.len();
+        let mut enum_types = String::from("nil");
+        let mut counter = 0;
+        let mut enums = Vec::new();
+
+        for (i, penum) in self.penums.iter().enumerate() {
+            let name = &penum.name;
+            enums.push(name.clone());
+            let mut const_values = String::new();
+            let mut name_map = String::new();
+            let mut value_map = String::new();
+            enum_types = format!("{msg_types}_enumTypes").as_str().parse().unwrap();
+
+            let mut enum_desc = EnumDescriptorProto::default();
+            enum_desc.name = Some(name.clone());
+
+
+            for field in &penum.fields {
+                let field_name = &field.name;
+                let field_index = &field.index;
+
+                let mut enum_val = EnumValueDescriptorProto::default();
+                enum_val.name = Some(field_name.clone());
+                enum_val.number = Some(*field_index as i32);
+                enum_desc.value.push(enum_val);
+
+                const_values.push_str(format!("    {name}_{field_name}    {name} = {field_index};\n").as_str());
+                name_map.push_str(format!("        {field_index}: \"{field_name}\",\n").as_str());
+                value_map.push_str(format!("        \"{field_name}\": {field_index},\n").as_str());
+            }
+            file_desc.enum_type.push(enum_desc);
+            go_types.push_str(format!("    ({name})(0), // {counter}: {name}\n").as_str());
+            counter += 1;
+
+            total_code.push_str(format!("
+
+type {name} int32
+
+const (
+{const_values})
+
+// Enum value maps for {name}
+var (
+    {name}_name = map[int32]string{{
+{name_map}    }}
+    {name}_value = map[string]int32{{
+{value_map}    }}
+)
+
+func (x {name}) Enum() *{name} {{
+    p := new({name})
+	*p = x
+	return p
+}}
+
+func (x {name}) String() string {{
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}}
+
+func ({name}) Descriptor() protoreflect.EnumDescriptor {{
+	return {msg_types}_enumTypes[{i}].Descriptor()
+}}
+
+func ({name}) Type() protoreflect.EnumType {{
+	return &{msg_types}_enumTypes[{i}]
+}}
+
+func (x {name}) Number() protoreflect.EnumNumber {{
+	return protoreflect.EnumNumber(x)
+}}
+
+// Deprecated: Use {name}.Descriptor instead.
+func ({name}) EnumDescriptor() ([]byte, []int) {{
+	return {msg_types}_rawDescGZIP(), []int{{{i}}}
+}}
+
+var {msg_types}_enumTypes = make([]protoimpl.EnumInfo, {penums})
+
+").as_str())
+        }
+
         for (i, message) in self.messages.iter().enumerate() {
-            let (struct_code, getters, desc, deps) = message.compile_go();
+            let (struct_code, getters, desc, deps) = message.compile_go(&enums);
             file_desc.message_type.push(desc);
             total_structs_and_getters.push_str(&struct_code);
             total_structs_and_getters.push_str(&getters);
@@ -244,7 +344,8 @@ const (
 
             let message_name = message.name.clone();
             total_code.push_str(struct_code.as_str());
-            go_types.push_str(format!("    (*{message_name})(nil), // {i}: {message_name}\n").as_str());
+            go_types.push_str(format!("    (*{message_name})(nil), // {counter}: {message_name}\n").as_str());
+            counter += 1;
             total_code.push_str(format!("
 func (x *{message_name}) Reset() {{
     *x = {message_name}{{}}
@@ -312,10 +413,9 @@ func {msg_types}_rawDescGZIP() []byte {{
 	return {msg_types}_rawDescData
 }}
 
-var {msg_types}_msgTypes = make([]protoimpl.MessageInfo, 3)
+var {msg_types}_msgTypes = make([]protoimpl.MessageInfo, {messages})
 var {msg_types}_goTypes = []any{{
-{go_types}
-}}
+{go_types}}}
 var {msg_types}_depIdxs = []int32{{{dep_idxs_code}}}
 
 func init() {{ {msg_types}_init() }}
@@ -328,14 +428,15 @@ func {msg_types}_init() {{
 		File: protoimpl.DescBuilder{{
 			GoPackagePath: reflect.TypeOf(x{{}}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData({msg_types}_rawDesc), len({msg_types}_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   {messages_len},
+			NumEnums:      {penums},
+			NumMessages:   {messages},
 			NumExtensions: 0,
 			NumServices:   0,
 		}},
 		GoTypes:           {msg_types}_goTypes,
 		DependencyIndexes: {msg_types}_depIdxs,
 		MessageInfos:      {msg_types}_msgTypes,
+        EnumInfos:         {enum_types},
 	}}.Build()
 	{cap_msg_type} = out.File
 	{msg_types}_goTypes = nil

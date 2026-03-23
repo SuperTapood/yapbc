@@ -6,6 +6,7 @@ WHITESPACE   = _{ " " | "\t" | "\r" | "\n" | "\r\n" }
 line_comment = @{ ("#" | "//") ~ (!NEWLINE ~ ANY)* }
 
 MESSAGE    = { "message" }
+ENUM_KW    = { "enum" }
 INT32_KW   = { "int32" }
 STRING_KW  = { "string" }
 
@@ -14,8 +15,13 @@ value    = { string | ident | int }
 repeated = { "repeated" }
 optional = { "optional" }
 default  = { "default" ~ ident }
-
 package     = { "package" ~ "=" ~ ident ~ ";" }
+
 field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ default? ~ "=" ~ int ~ ";" }
 message     = { line_comment* ~ MESSAGE ~ ident ~ "{" ~ field* ~ "}" }
-messages    = { SOI ~ package? ~ message* }
+
+enum_field  = { line_comment* ~ ident ~ "=" ~ int ~ ";" }
+enumeration = { line_comment* ~ ENUM_KW ~ ident ~ "{" ~ enum_field* ~ "}" }
+
+objects     = { enumeration | message }
+messages    = { SOI ~ package? ~ objects* }

@@ -4,3 +4,5 @@ mod compile_python;
 pub mod field;
 pub mod message;
 pub mod ptype;
+mod penum;
+mod penum_field;

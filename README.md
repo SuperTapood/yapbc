@@ -1,12 +1,11 @@
-# yapbc
+# Yet Another ProtoBuf Compiler
 
-Yet Another ProtoBuf Compiler
+A highly opinionated, BLAZING FAST protobuf compiler written in Rust.
 
-A highly opinionated protobuf compiler written in Rust
-
-needed to be use-ready:
-
-- finish go compile
-- support nested messages
-- support enums
 - support imports
+- support oneof
+- deprecate ptype
+- better formats
+- borrow everything
+- go comments
+- test on flint

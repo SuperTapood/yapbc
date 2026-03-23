@@ -1,6 +1,8 @@
 use crate::ast::comments::Comments;
 use crate::ast::field::Field;
 use crate::ast::message::{Message, Messages};
+use crate::ast::penum::PEnum;
+use crate::ast::penum_field::PEnumField;
 use crate::ast::ptype::PType;
 use crate::ast::ptype::PType::{RepeatedCustom, RepeatedInt32, RepeatedPString};
 use crate::util::capitalize_first;
@@ -61,6 +63,16 @@ impl Comments {
     }
 }
 
+impl PEnumField {
+    pub fn compile_python(&self) -> String {
+        let name = &self.name;
+        let index = self.index;
+        let comments = self.comments.compile_python();
+
+        format!("{name} = {index}\n{comments}")
+    }
+}
+
 impl Field {
     pub fn compile_python(&self) -> (String, String, String) {
         let mut field_code = String::new();
@@ -85,6 +97,24 @@ impl Field {
             format!("{}: {}", self.name, py_type),
             self.comments.oneliner_python(),
         )
+    }
+}
+
+impl PEnum {
+    pub fn compile_python(&self) -> String {
+        let name = &self.name;
+        let mut fields = String::new();
+
+        for field in &self.fields {
+            fields.push_str(format!("    {}", field.compile_python()).as_str());
+        }
+
+        let comments = self.comments.compile_python();
+
+        format!("\
+class {name}(betterproto2.Enum):
+{comments}{fields}
+")
     }
 }
 
@@ -182,6 +212,10 @@ __all__ = (
         }
 
         code.push_str(")\n\n");
+
+        for penum in self.penums.iter() {
+            code.push_str(format!("{}\n", penum.compile_python()).as_str());
+        }
 
         for message in self.messages.iter() {
             code.push_str(format!("{}\n", message.compile_python()).as_str());
