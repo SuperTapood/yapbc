@@ -1,0 +1,8 @@
+// not pvc
+enum AccessMode {
+    // read write once
+    ReadWriteOnce = 0;
+    ReadOnlyMany = 1;
+    ReadWriteMany = 2;
+    ReadWriteOncePod = 3;
+}

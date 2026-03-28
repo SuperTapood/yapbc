@@ -1,0 +1,9 @@
+import k11s/AccessMode;
+
+// pvc
+message VolumeClaimTemplate {
+    string name = 1;
+    repeated AccessMode access_modes = 2;
+    string storage_class_name = 3;
+    string storage = 4;
+}

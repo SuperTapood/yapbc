@@ -1,27 +1,25 @@
-ident = @{ (ASCII_ALPHA | "_" | "'" | "\"") ~ (ASCII_ALPHANUMERIC | "_" | "'" | "\"")* }int   = @{ ASCII_DIGIT+ }
+ident = @{ (ASCII_ALPHA | "_" | "'" | "\"" | "/" | ".") ~ (ASCII_ALPHANUMERIC | "_" | "'" | "\"" | "/" | ".")* }
+int   = @{ ASCII_DIGIT+ }
 string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 WHITESPACE   = _{ " " | "\t" | "\r" | "\n" | "\r\n" }
 
 line_comment = @{ ("#" | "//") ~ (!NEWLINE ~ ANY)* }
 
-MESSAGE    = { "message" }
-ENUM_KW    = { "enum" }
-INT32_KW   = { "int32" }
-STRING_KW  = { "string" }
-
-ptype    = { INT32_KW | STRING_KW | ident }
+ptype    = { "int32" | "message" | ident }
 value    = { string | ident | int }
 repeated = { "repeated" }
 optional = { "optional" }
 default  = { "default" ~ ident }
-package     = { "package" ~ "=" ~ ident ~ ";" }
+package     = { "package" ~ ident ~ ";" }
 
 field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ default? ~ "=" ~ int ~ ";" }
-message     = { line_comment* ~ MESSAGE ~ ident ~ "{" ~ field* ~ "}" }
+message     = { line_comment* ~ "message" ~ ident ~ "{" ~ field* ~ "}" }
 
 enum_field  = { line_comment* ~ ident ~ "=" ~ int ~ ";" }
-enumeration = { line_comment* ~ ENUM_KW ~ ident ~ "{" ~ enum_field* ~ "}" }
+enumeration = { line_comment* ~ "enum" ~ ident ~ "{" ~ enum_field* ~ "}" }
+
+import = { "import" ~ ident ~ ";" }
 
 objects     = { enumeration | message }
-messages    = { SOI ~ package? ~ objects* }
+messages    = { SOI ~ package? ~ import*? ~ objects* }

@@ -54,10 +54,11 @@ pub struct Messages {
     pub package: String,
     pub messages: Vec<Message>,
     pub penums: Vec<PEnum>,
+    pub imports: Vec<String>,
 }
 
 impl Messages {
-    pub fn parse(data: String) -> Messages {
+    pub fn parse(data: String, file: String) -> Messages {
         let successful_parse = ProtoParser::parse(Rule::messages, &data)
             .expect("unsuccessful parse")
             .next()
@@ -67,6 +68,7 @@ impl Messages {
 
         let mut messages = Vec::new();
         let mut penums = Vec::new();
+        let mut imports = Vec::new();
         let mut package = String::new();
         let mut object_counter = 0;
 
@@ -89,6 +91,9 @@ impl Messages {
                 Rule::package => {
                     package = record.into_inner().as_str().to_string();
                 }
+                Rule::import => {
+                    imports.push(record.into_inner().as_str().to_string());
+                }
                 _ => {
                     panic!("{}", format!("unrecognised rule: {:?}", record.as_rule()))
                 }
@@ -96,10 +101,10 @@ impl Messages {
         }
 
         if object_counter == 0 {
-            println!("no messages/enums found");
+            println!("no messages/enums found in file {file}");
             exit(1);
         }
 
-        Messages { package, messages, penums }
+        Messages { package, messages, penums, imports }
     }
 }

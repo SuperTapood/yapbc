@@ -51,4 +51,12 @@ impl PType {
             _ => false,
         }
     }
+
+    pub fn is_repeated(&self) -> bool {
+        match self {
+            PType::RepeatedCustom(_) => true,
+            PType::Custom(_) => false,
+            _ => false,
+        }
+    }
 }
