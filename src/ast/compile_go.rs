@@ -17,7 +17,8 @@ impl PType {
             PType::PString => { "string".parse().unwrap() }
             PType::RepeatedPString => { "[]string".parse().unwrap() }
             PType::Custom(n) => { n.as_str().parse().unwrap() }
-            PType::RepeatedCustom(n) => format!("[]*{n}").as_str().parse().unwrap()
+            PType::RepeatedCustom(n) => format!("[]*{n}").as_str().parse().unwrap(),
+            PType::Oneof => { "".parse().unwrap() }
         }
     }
 
@@ -30,6 +31,7 @@ impl PType {
                 PType::RepeatedPString => "nil",
                 PType::Custom(_) => "nil",
                 PType::RepeatedCustom(_) => "nil",
+                PType::Oneof => "nil",
             }
         )
     }
@@ -56,6 +58,7 @@ impl Field {
         &self,
         msg: &mut DescriptorProto,
         is_enum: bool,
+        oneof_index: Option<i32>,
     ) {
         let mut field = FieldDescriptorProto::default();
         field.name = Some(self.name.clone());
@@ -67,6 +70,10 @@ impl Field {
         } else {
             Label::Optional as i32
         });
+
+        if oneof_index.is_some() {
+            field.oneof_index = oneof_index;
+        }
 
         field.r#type = Some(match &self.ptype {
             PType::Custom(_) | PType::RepeatedCustom(_) => {
@@ -82,15 +89,23 @@ impl Field {
 
         msg.field.push(field);
     }
-    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto, enum_types: &Vec<String>) -> (String, String, Option<String>) {
+    pub fn compile_go(&self, message: String, desc: &mut DescriptorProto, enum_types: &Vec<String>, oneof_index: Option<i32>) -> (String, String, Option<String>) {
         let name = snake_to_pascal(&*self.name);
-        let str_type = self.ptype.compile_go();
+        let str_type = if self.maybe_types.is_none() {
+            self.ptype.compile_go()
+        } else {
+            format!("is{message}_{name}")
+        };
         let default = if self.default.is_some() {
             self.default.clone().unwrap()
         } else {
             self.ptype.default_go()
         };
-        let struct_var = format!("    {name}  {str_type}\n");
+        let struct_var = if self.maybe_types.is_none() {
+            format!("    {name}  {str_type}\n")
+        } else {
+            format!("    {name}  {str_type} `protobuf_oneof:\"{}\"`\n", self.name)
+        };
 
         let getter = format!("
 func (x *{message}) Get{name}() {str_type} {{
@@ -115,7 +130,7 @@ func (x *{message}) Get{name}() {str_type} {{
             }
         }
 
-        self.add_field_to_desc(desc, is_enum);
+        self.add_field_to_desc(desc, is_enum, oneof_index);
 
         (struct_var, getter, dependency)
     }
@@ -127,51 +142,135 @@ impl Message {
         let mut desc = DescriptorProto::default();
         let mut deps = Vec::new();
         desc.name = Some(name.clone());
-        let mut struct_code = format!(
-            "
 
-type {name} struct {{
-    state         protoimpl.MessageState
-    unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-"
+        let mut struct_code = format!(
+            "\ntype {name} struct {{\n    state         protoimpl.MessageState\n    unknownFields protoimpl.UnknownFields\n    sizeCache     protoimpl.SizeCache\n"
         );
         let mut getters = String::new();
 
+        let mut oneof_idx = None;
+
         for field in &self.fields {
-            let (struct_var, getter, dep) = field.compile_go(name.clone(), &mut desc, enum_types);
-            struct_code.push_str(struct_var.as_str());
-            getters.push_str(getter.as_str());
-            if let Some(d) = dep {
-                deps.push(d);
+            if let Some(ref nested_fields) = field.maybe_types {
+                // 1. Descriptor Logic: Register the Oneof group
+                oneof_idx = Some(desc.oneof_decl.len() as i32);
+                desc.oneof_decl.push(prost_types::OneofDescriptorProto {
+                    name: Some(field.name.clone()),
+                    options: None,
+                });
+
+                // 2. Struct Logic: Add the interface field to the struct
+                let pascal_name = snake_to_pascal(&field.name);
+                let interface_name = format!("is{name}_{pascal_name}");
+                struct_code.push_str(&format!("    {pascal_name}  {interface_name} `protobuf_oneof:\"{}\"`\n", field.name));
+
+                // 3. Nested Fields: Add each choice to the descriptor and generate getters
+                for nested in nested_fields {
+                    // Update the descriptor with the oneof index
+                    nested.add_field_to_desc(&mut desc, false, oneof_idx);
+
+                    // Generate the Getter for this specific oneof branch
+                    let branch_name = snake_to_pascal(&nested.name); // Usually the type name
+                    let branch_type = nested.ptype.compile_go();
+                    let default_val = nested.ptype.default_go();
+
+                    getters.push_str(&format!("
+func (x *{name}) Get{branch_name}() {branch_type} {{
+    if x, ok := x.Get{pascal_name}().(*{name}_{branch_name}); ok {{
+        return x.{branch_name}
+    }}
+    return {default_val}
+}}
+"));
+                }
+
+                // Generic getter for the interface itself
+                getters.push_str(&format!("
+func (x *{name}) Get{pascal_name}() {interface_name} {{
+    if x != nil {{
+        return x.{pascal_name}
+    }}
+    return nil
+}}
+"));
+
+            } else {
+                // Standard field logic
+                let (struct_var, getter, dep) = field.compile_go(name.clone(), &mut desc, enum_types, oneof_idx);
+                struct_code.push_str(struct_var.as_str());
+                getters.push_str(getter.as_str());
+                if let Some(d) = dep {
+                    deps.push(d);
+                }
             }
         }
 
-        struct_code.push_str("
-}
-        ");
+        struct_code.push_str("}\n");
+
+        // 4. Generate the Interface and Wrapper Structs
+        for field in &self.fields {
+            if let Some(ref nested_fields) = field.maybe_types {
+                let pascal_name = snake_to_pascal(&field.name);
+                let is_type_name = format!("is{}_{}", self.name, pascal_name);
+
+                struct_code.push_str(&format!("\ntype {is_type_name} interface {{\n    {is_type_name}()\n}}\n"));
+
+                for nested in nested_fields {
+                    let type_name = nested.ptype.compile_go();
+                    let branch_struct_name = snake_to_pascal(&nested.name);
+                    let index = nested.index;
+
+                    struct_code.push_str(&format!("
+type {name}_{branch_struct_name} struct {{
+    {branch_struct_name} {type_name} `protobuf:\"bytes,{index},opt,name={},proto3,oneof\"`
+}}
+func (*{name}_{branch_struct_name}) {is_type_name}() {{}}\n", nested.name));
+                }
+            }
+        }
 
         (struct_code, getters, desc, deps)
+    }
+}
+
+fn import_field(field: &mut Field, object: String, tmp: String) {
+    if let Some(ref mut nested_fields) = field.maybe_types {
+        for nested_field in nested_fields {
+            import_field(nested_field, object.clone(), tmp.clone());
+        }
+    }
+
+    if field.ptype.to_string() == object {
+        if field.ptype.is_nested() {
+            let actual = field.ptype.to_string();
+            if field.ptype.is_repeated() {
+                field.ptype = PType::RepeatedCustom(format!("{tmp}.{actual}"));
+            } else {
+                field.ptype = PType::Custom(format!("{tmp}.{actual}"));
+            }
+        }
     }
 }
 
 impl Messages {
     fn generate_go_string(&self, raw_bytes: &[u8], var_name: &str) -> String {
         let mut go_str_lines = vec![format!("const {} = \"\" +", var_name)];
-
         let mut current_line = String::from("\t\"");
 
         for &b in raw_bytes {
             match b {
+                7 => current_line.push_str("\\a"),     // Bell
+                8 => current_line.push_str("\\b"),     // Backspace
+                9 => current_line.push_str("\\t"),
                 10 => {
                     current_line.push_str("\\n");
                     current_line.push_str("\" +");
                     go_str_lines.push(current_line);
                     current_line = String::from("\t\"");
                 }
-                13 => current_line.push_str("\\r"),
-                9 => current_line.push_str("\\t"),
                 11 => current_line.push_str("\\v"),
+                12 => current_line.push_str("\\f"),    // Form feed
+                13 => current_line.push_str("\\r"),
                 34 => current_line.push_str("\\\""),
                 92 => current_line.push_str("\\\\"),
                 32..=126 => current_line.push(b as char),
@@ -192,6 +291,7 @@ impl Messages {
 
         go_str_lines.join("\n")
     }
+
     pub fn compile_go(&mut self, file: PathBuf, output: PathBuf, module: Option<String>) {
         let parent = file.parent().unwrap().to_str().unwrap().strip_prefix(output.to_str().unwrap()).unwrap();
         if self.package.is_empty() {
@@ -201,8 +301,11 @@ impl Messages {
         let source_file = file.to_str().unwrap().to_string();
         let package = self.package.clone();
         let mut imports = String::new();
+        let stem = pascal_to_snake(file.file_stem().and_then(|s| s.to_str()).unwrap());
+        let msg_types = format!("file_{stem}");
+        let mut oneof_wrappers = String::new();
 
-        for import in &self.imports {
+        for import in self.imports.clone() {
             let split = import.split("/").collect::<Vec<_>>();
             let object = split[split.len() - 1];
             if !module.is_some() {
@@ -215,16 +318,16 @@ impl Messages {
 
             for message in &mut self.messages {
                 for field in &mut message.fields {
-                    if field.ptype.is_nested() {
-                        let actual = field.ptype.to_string();
-                        println!("{:?}", field.ptype);
-                        println!("{:?}", actual);
-                        println!("{}", field.ptype.is_repeated());
-                        if field.ptype.is_repeated() {
-                            field.ptype = PType::RepeatedCustom(format!("{tmp}.{actual}"));
-                        } else {
-                            field.ptype = PType::Custom(format!("{tmp}.{actual}"));
+                    import_field(field, object.parse().unwrap(), tmp.clone());
+                    if field.maybe_types.is_some() {
+                        let index = message.index;
+                        oneof_wrappers.push_str(format!("    {msg_types}_msgTypes[{index}].OneofWrappers = []any{{\n").as_str());
+                        for field in &mut field.maybe_types.clone().unwrap() {
+                            let type_name = field.ptype.compile_go();
+                            let actual = type_name.split('.').last().unwrap().to_string();
+                            oneof_wrappers.push_str(format!("        (*{}_{})(nil),\n", message.name, actual).as_str());
                         }
+                        oneof_wrappers.push_str("    }");
                     }
                 }
             }
@@ -253,9 +356,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )"
         ));
-        println!("import deez nuts {:?}", self.imports);
-        let stem = pascal_to_snake(file.file_stem().and_then(|s| s.to_str()).unwrap());
-        let msg_types = format!("file_{stem}");
         let mut go_types = String::new();
         // 1. Initialize the File Descriptor
         let mut file_desc = FileDescriptorProto::default();
@@ -456,6 +556,7 @@ func {msg_types}_init() {{
 	if {cap_msg_type} != nil {{
 		return
 	}}
+{oneof_wrappers}
 	type x struct{{}}
 	out := protoimpl.TypeBuilder{{
 		File: protoimpl.DescBuilder{{

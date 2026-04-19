@@ -19,18 +19,16 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
 type VolumeClaimTemplate struct {
     state         protoimpl.MessageState
     unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+    sizeCache     protoimpl.SizeCache
     Name  string
     AccessModes  []*k11s.AccessMode
     StorageClassName  string
     Storage  string
-
 }
-        
+
 func (x *VolumeClaimTemplate) Reset() {
     *x = VolumeClaimTemplate{}
 	mi := &file_test_msgTypes[0]
@@ -91,6 +89,171 @@ func (x *VolumeClaimTemplate) GetStorage() string {
 }
         
 
+
+type K8SStack struct {
+    state         protoimpl.MessageState
+    unknownFields protoimpl.UnknownFields
+    sizeCache     protoimpl.SizeCache
+    Namespace  string
+}
+
+func (x *K8SStack) Reset() {
+    *x = K8SStack{}
+	mi := &file_test_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *K8SStack) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*K8SStack) ProtoMessage() {}
+
+func (x *K8SStack) ProtoReflect() protoreflect.Message {
+	mi := &file_test_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use K8SStack.ProtoReflect.Descriptor instead.
+func (*K8SStack) Descriptor() ([]byte, []int) {
+	return file_test_rawDescGZIP(), []int{1}
+}
+
+
+func (x *K8SStack) GetNamespace() string {
+    if x != nil {
+        return x.Namespace
+    }
+    return ""
+}
+        
+
+
+type StackTypes struct {
+    state         protoimpl.MessageState
+    unknownFields protoimpl.UnknownFields
+    sizeCache     protoimpl.SizeCache
+    Type  isStackTypes_Type `protobuf_oneof:"type"`
+}
+
+type isStackTypes_Type interface {
+    isStackTypes_Type()
+}
+
+type StackTypes_K8sstack struct {
+    K8sstack K8SStack `protobuf:"bytes,1,opt,name=k8sstack,proto3,oneof"`
+}
+func (*StackTypes_K8sstack) isStackTypes_Type() {}
+
+func (x *StackTypes) Reset() {
+    *x = StackTypes{}
+	mi := &file_test_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StackTypes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StackTypes) ProtoMessage() {}
+
+func (x *StackTypes) ProtoReflect() protoreflect.Message {
+	mi := &file_test_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StackTypes.ProtoReflect.Descriptor instead.
+func (*StackTypes) Descriptor() ([]byte, []int) {
+	return file_test_rawDescGZIP(), []int{2}
+}
+
+
+func (x *StackTypes) GetK8sstack() K8SStack {
+    if x, ok := x.GetType().(*StackTypes_K8sstack); ok {
+        return x.K8sstack
+    }
+    return nil
+}
+
+func (x *StackTypes) GetType() isStackTypes_Type {
+    if x != nil {
+        return x.Type
+    }
+    return nil
+}
+
+
+
+type Stack struct {
+    state         protoimpl.MessageState
+    unknownFields protoimpl.UnknownFields
+    sizeCache     protoimpl.SizeCache
+    Name  string
+    Stack  StackTypes
+}
+
+func (x *Stack) Reset() {
+    *x = Stack{}
+	mi := &file_test_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Stack) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Stack) ProtoMessage() {}
+
+func (x *Stack) ProtoReflect() protoreflect.Message {
+	mi := &file_test_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Stack.ProtoReflect.Descriptor instead.
+func (*Stack) Descriptor() ([]byte, []int) {
+	return file_test_rawDescGZIP(), []int{3}
+}
+
+
+func (x *Stack) GetName() string {
+    if x != nil {
+        return x.Name
+    }
+    return ""
+}
+        
+func (x *Stack) GetStack() StackTypes {
+    if x != nil {
+        return x.Stack
+    }
+    return nil
+}
+        
+
 var File_test protoreflect.FileDescriptor
 
 const file_test_rawDesc = "" +
@@ -98,9 +261,18 @@ const file_test_rawDesc = "" +
 	"\x1atest/k8s\\module\\test.proto\"\xa9\x01\n" +
 	"\x13VolumeClaimTemplate\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x124\n" +
-	"\x0caccess_modes\x18\x02 \x03(\v2\x10.k11s.AccessModeR\x0caccess_modes\x12.\n" +
+	"\faccess_modes\x18\x02 \x03(\v2\x10.k11s.AccessModeR\faccess_modes\x12.\n" +
 	"\x12storage_class_name\x18\x03 \x01(\tR\x12storage_class_name\x12\x18\n" +
-	"\x07storage\x18\x04 \x01(\tR\x07storageB\x08Z\x06moduleb\x06proto3"
+	"\astorage\x18\x04 \x01(\tR\astorage\"(\n" +
+	"\bK8SStack\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"=\n" +
+	"\n" +
+	"StackTypes\x12'\n" +
+	"\bk8sstack\x18\x01 \x01(\v2\t.K8SStackH\x00R\bk8sstackB\x06\n" +
+	"\x04type\">\n" +
+	"\x05Stack\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\x05stack\x18\x02 \x01(\v2\v.StackTypesR\x05stackB\bZ\x06moduleb\x06proto3"
 
 var (
     file_test_rawDescOnce sync.Once
@@ -114,16 +286,20 @@ func file_test_rawDescGZIP() []byte {
 	return file_test_rawDescData
 }
 
-var file_test_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_test_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_test_goTypes = []any{
     (*VolumeClaimTemplate)(nil), // 0: VolumeClaimTemplate
+    (*K8SStack)(nil), // 1: K8SStack
+    (*StackTypes)(nil), // 2: StackTypes
+    (*Stack)(nil), // 3: Stack
 }
 var file_test_depIdxs = []int32{
-    0, // [1:1] is the sub-list for method output_type
-    0, // [1:1] is the sub-list for method input_type
-    0, // [1:1] is the sub-list for extension type_name
-    0, // [1:1] is the sub-list for extension extendee
-    0, // [0:0] is the sub-list for field type_name
+    2, // 0: Stack.stacktypes:type_name -> StackTypes
+    1, // [1:1] is the sub-list for method output_type
+    1, // [1:1] is the sub-list for method input_type
+    1, // [1:1] is the sub-list for extension type_name
+    1, // [1:1] is the sub-list for extension extendee
+    0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_test_init() }
@@ -131,13 +307,16 @@ func file_test_init() {
 	if File_test != nil {
 		return
 	}
+    file_test_msgTypes[2].OneofWrappers = []any{
+        (*StackTypes_K8SStack)(nil),
+    }
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_test_rawDesc), len(file_test_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

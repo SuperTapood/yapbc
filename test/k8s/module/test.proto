@@ -7,3 +7,18 @@ message VolumeClaimTemplate {
     string storage_class_name = 3;
     string storage = 4;
 }
+
+message K8SStack {
+    string namespace = 1;
+}
+
+message StackTypes {
+    oneof type {
+        K8SStack k8sstack = 1;
+    }
+}
+
+message Stack {
+    string name = 1;
+    StackTypes stack = 2;
+}

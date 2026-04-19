@@ -81,7 +81,7 @@ const file_test1_rawDesc = "" +
 	"\n" +
 	"AccessMode\x12\x11\n" +
 	"\rReadWriteOnce\x10\x00\x12\x10\n" +
-	"\x0cReadOnlyMany\x10\x01\x12\x11\n" +
+	"\fReadOnlyMany\x10\x01\x12\x11\n" +
 	"\rReadWriteMany\x10\x02\x12\x14\n" +
 	"\x10ReadWriteOncePod\x10\x03B\x06Z\x04k11sb\x06proto3"
 
@@ -114,6 +114,7 @@ func file_test1_init() {
 	if File_test1 != nil {
 		return
 	}
+
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -13,7 +13,10 @@ optional = { "optional" }
 default  = { "default" ~ ident }
 package     = { "package" ~ ident ~ ";" }
 
-field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ default? ~ "=" ~ int ~ ";" }
+regular_field       = { line_comment* ~ optional? ~ repeated? ~ ptype ~ ident ~ default? ~ "=" ~ int ~ ";" }
+oneof_field = { line_comment* ~ "oneof" ~ ident ~ "{" ~ regular_field* ~ "}"}
+field = { regular_field | oneof_field }
+
 message     = { line_comment* ~ "message" ~ ident ~ "{" ~ field* ~ "}" }
 
 enum_field  = { line_comment* ~ ident ~ "=" ~ int ~ ";" }

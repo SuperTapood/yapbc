@@ -16,6 +16,7 @@ impl PType {
             RepeatedPString => ("List[str]".to_string(), "TYPE_STRING".to_string()),
             PType::Custom(n) => (format!("\"{n}\""), "TYPE_MESSAGE".to_string()),
             RepeatedCustom(n) => (format!("List[\"{n}\"]"), "TYPE_MESSAGE".to_string()),
+            PType::Oneof => ("oneof".to_string(), "TYPE_MESSAGE".to_string()),
         }
     }
 
@@ -27,6 +28,7 @@ impl PType {
             RepeatedPString => "None".to_string(),
             PType::Custom(_) => "None".to_string(),
             RepeatedCustom(_) => "None".to_string(),
+            PType::Oneof => "None".to_string(),
         }
     }
 }
@@ -72,7 +74,38 @@ impl PEnumField {
 }
 
 impl Field {
+    fn compile_oneof(&self) -> (String, String, String) {
+        let mut field_code = String::new();
+        let mut parameters = String::from("");
+        let types = self.maybe_types.clone().unwrap();
+
+        for field in types {
+            let (mut py_type, _) = field.ptype.compile_python();
+            if field.default.is_some() {
+                py_type = format!("Optional[{}]", py_type);
+            }
+            field_code.push_str(&format!("{}: \"{} | None\"= betterproto2.field({}, betterproto2.TYPE_MESSAGE, optional=True, group=\"{}\")",
+                                         field.name,
+                                         py_type.replace("\"", ""),
+                                         field.index,
+                                         self.name,
+            ));
+            field_code.push_str(format!("\n    {}", self.comments.compile_python().as_str()).as_str());
+
+            parameters.push_str(&format!("\n        {}: \"{} | None\" = None,", field.name, py_type.replace("\"", "")));
+        }
+
+        parameters.pop();
+
+        (
+            field_code,
+            parameters,
+            self.comments.oneliner_python())
+    }
     pub fn compile_python(&self) -> (String, String, String) {
+        if self.ptype == PType::Oneof {
+            return self.compile_oneof();
+        }
         let mut field_code = String::new();
         let (mut py_type, msg_type) = self.ptype.compile_python();
         if self.default.is_some() {
@@ -126,26 +159,40 @@ impl Message {
         let mut assignment = String::new();
         for f in &self.fields {
             let (preinit, init, comment) = f.compile_python();
-            if f.default.is_some() {
+            if f.maybe_types.is_none() {
+                if f.default.is_some() {
+                    variables_with_default_init.push_str(
+                        format!(
+                            "        {} = {}, \n",
+                            init,
+                            f.default.clone().unwrap().as_str()
+                        )
+                            .as_str(),
+                    );
+                    variables_with_default_comment.push_str(
+                        format!("        :param {}: {} \n", f.name.clone(), comment).as_str(),
+                    );
+                } else {
+                    variables_init.push_str(format!("        {}, \n", init).as_str());
+                    variables_comment.push_str(
+                        format!("        :param {}: {} \n", f.name.clone(), comment).as_str(),
+                    );
+                }
+                code.push_str(format!("    {}", preinit).as_str());
+                assignment.push_str(format!("        self.{} = {}\n", f.name, f.name).as_str());
+            } else {
                 variables_with_default_init.push_str(
                     format!(
-                        "        {} = {}, \n",
+                        "        {}, \n",
                         init,
-                        f.default.clone().unwrap().as_str()
                     )
                         .as_str(),
                 );
-                variables_with_default_comment.push_str(
-                    format!("        :param {}: {} \n", f.name.clone(), comment).as_str(),
-                );
-            } else {
-                variables_init.push_str(format!("        {}, \n", init).as_str());
-                variables_comment.push_str(
-                    format!("        :param {}: {} \n", f.name.clone(), comment).as_str(),
-                );
+                code.push_str(format!("    {}", preinit).as_str());
+                for maybe_field in f.maybe_types.clone().unwrap() {
+                    assignment.push_str(format!("        self.{} = {}\n", maybe_field.name, maybe_field.name).as_str());
+                }
             }
-            code.push_str(format!("    {}", preinit).as_str());
-            assignment.push_str(format!("        self.{} = {}\n", f.name, f.name).as_str());
         }
 
         format!(

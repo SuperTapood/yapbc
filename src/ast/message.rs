@@ -34,9 +34,12 @@ impl Message {
                     }
                 }
                 Rule::field => {
-                    fields.push(Field::parse(record));
+                    let actual = record.clone().into_inner().next().unwrap();
+                    fields.push(Field::parse(actual));
                 }
-                _ => (),
+                other => {
+                    panic!("uknown rule {:#?}", other);
+                }
             }
         }
 

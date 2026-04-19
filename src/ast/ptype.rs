@@ -10,6 +10,7 @@ pub enum PType {
     RepeatedPString,
     Custom(String),
     RepeatedCustom(String),
+    Oneof,
 }
 
 impl PType {
@@ -41,6 +42,7 @@ impl PType {
             RepeatedPString => "string",
             PType::Custom(n) => n,
             RepeatedCustom(n) => n,
+            PType::Oneof => "oneof",
         })
     }
 

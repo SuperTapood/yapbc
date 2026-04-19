@@ -12,10 +12,11 @@ pub struct Field {
     pub repeated: bool,
     pub index: usize,
     pub default: Option<String>,
+    pub maybe_types: Option<Vec<Field>>,
 }
 
 impl Field {
-    pub fn parse(record: Pair<Rule>) -> Field {
+    fn parse_regular(record: Pair<Rule>) -> Field {
         let inner = record.into_inner();
         let (comments, mut record) = Comments::parse(inner);
 
@@ -56,6 +57,42 @@ impl Field {
             comments,
             name: f_name.to_string(),
             ptype,
+            maybe_types: None,
+        }
+    }
+
+    fn parse_oneof(record: Pair<Rule>) -> Field {
+        let inner = record.into_inner();
+        let (comments, mut record) = Comments::parse(inner);
+
+        let next = record.next().unwrap();
+
+        let name = next.as_str();
+        let mut maybe_types = Vec::new();
+        loop {
+            let maybe_next = record.next();
+            if maybe_next.is_none() {
+                break;
+            }
+            let next = maybe_next.unwrap();
+            maybe_types.push(Field::parse_regular(next));
+        }
+
+        Field {
+            index: 0,
+            repeated: false,
+            default: None,
+            comments,
+            name: name.parse().unwrap(),
+            ptype: PType::Oneof,
+            maybe_types: Some(maybe_types),
+        }
+    }
+    pub fn parse(record: Pair<Rule>) -> Field {
+        match record.as_rule() {
+            Rule::regular_field => Field::parse_regular(record),
+            Rule::oneof_field => Field::parse_oneof(record),
+            _ => unreachable!()
         }
     }
 }
