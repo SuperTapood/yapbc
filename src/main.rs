@@ -35,7 +35,7 @@ enum Commands {
         output: PathBuf,
         #[arg(short, long, value_enum)]
         /// The Language you want to compile to
-        language: Language,
+        languages: Vec<Language>,
         #[arg(short, long)]
         module: Option<String>,
     },
@@ -92,36 +92,61 @@ fn compile(mut files: Vec<PathBuf>, output: PathBuf, language: Language, module:
         exit(1);
     }
 
-    let mut files_contents = BTreeMap::new();
-
-    while let Some(current_path) = files.pop() {
-        if !current_path.exists() {
-            println!("File does not exist: {}", current_path.display());
-            exit(1);
-        }
-
-        let metadata = fs::metadata(&current_path).expect("Failed to get metadata");
-
-        if metadata.is_dir() {
-            for entry in fs::read_dir(&current_path).expect("Failed to read dir") {
-                let path = entry.expect("Failed to read entry").path();
-                files.push(path);
-            }
-        } else {
-            if current_path.extension().unwrap() == "proto" {
-                files_contents.insert(current_path.clone(), fs::read_to_string(&current_path).expect("Failed to read contents"));
-            }
-        }
-    }
+    println!("files {:?}", files);
 
     match language {
         Language::Python => {
+            let mut files_contents = BTreeMap::new();
+
+            while let Some(current_path) = files.pop() {
+                if !current_path.exists() {
+                    println!("File does not exist: {}", current_path.display());
+                    exit(1);
+                }
+
+                let metadata = fs::metadata(&current_path).expect("Failed to get metadata");
+
+                if metadata.is_dir() {
+                    for entry in fs::read_dir(&current_path).expect("Failed to read dir") {
+                        let path = entry.expect("Failed to read entry").path();
+                        files.push(path);
+                    }
+                } else {
+                    if current_path.extension().unwrap() == "proto" {
+                        files_contents.insert(current_path.clone(), fs::read_to_string(&current_path).expect("Failed to read contents"));
+                    }
+                }
+            }
             compile_python(files_contents, output);
         }
         Language::Go => {
-            for (file, content) in &files_contents {
-                let mut messages = Messages::parse(content.clone(), file.to_str().unwrap().to_string());
-                messages.compile_go(file.clone(), output.clone(), module.clone());
+            while let Some(current_path) = files.pop() {
+                let mut actual_files = Vec::new();
+                actual_files.push(current_path.clone());
+                while let Some(filename) = actual_files.pop() {
+                    let mut files_contents = BTreeMap::new();
+                    if !filename.clone().exists() {
+                        println!("File does not exist: {}", filename.clone().display());
+                        exit(1);
+                    }
+
+                    let metadata = fs::metadata(filename.clone()).expect("Failed to get metadata");
+
+                    if metadata.is_dir() {
+                        for entry in fs::read_dir(filename.clone()).expect("Failed to read dir") {
+                            let path = entry.expect("Failed to read entry").path();
+                            actual_files.push(path);
+                        }
+                    } else {
+                        if filename.clone().extension().unwrap() == "proto" {
+                            files_contents.insert(filename.clone(), fs::read_to_string(filename.clone()).expect("Failed to read contents"));
+                        }
+                    }
+                    for (file, content) in &files_contents {
+                        let mut messages = Messages::parse(content.clone(), file.to_str().unwrap().to_string());
+                        messages.compile_go(file.clone(), current_path.clone(), output.clone(), module.clone());
+                    }
+                }
             }
         }
     }
@@ -135,9 +160,13 @@ fn main() {
         Commands::Compile {
             files,
             output,
-            language,
+            languages,
             module,
-        } => compile(files.clone(), output.clone(), language.clone(), module.clone()),
+        } => {
+            for lang in languages {
+                compile(files.clone(), output.clone(), lang.clone(), module.clone())
+            }
+        }
     }
     let duration = start.elapsed();
     println!("done in {:?}", duration);

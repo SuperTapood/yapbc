@@ -2,7 +2,7 @@
 
 A highly opinionated, BLAZING FAST protobuf compiler written in Rust.
 
-- support oneof
+- why do certain files call init for other files
 - deprecate ptype
 - better formats
 - go comments

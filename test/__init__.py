@@ -2,14 +2,16 @@
 # sources: test1.proto, test.proto
 # This file has been @generated
 
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List
+
 import betterproto2
 
 default_message_pool = betterproto2.MessagePool()
 
 _COMPILER_VERSION = "0.9.0"
 betterproto2.check_compiler_version(_COMPILER_VERSION)
+
 
 class AccessMode(betterproto2.Enum):
     """
@@ -43,12 +45,12 @@ class VolumeClaimTemplate(betterproto2.Message):
     storage: str = betterproto2.field(4, betterproto2.TYPE_STRING, repeated=False, optional=False)
 
     def __init__(
-        self,
-        *,
-        name: str, 
-        access_modes: List["AccessMode"], 
-        storage_class_name: str, 
-        storage: str, 
+            self,
+            *,
+            name: str,
+            access_modes: List["AccessMode"],
+            storage_class_name: str,
+            storage: str,
     ):
         """
         :param name: - 
@@ -62,8 +64,10 @@ class VolumeClaimTemplate(betterproto2.Message):
         self.storage = storage
 
         self._unknown_fields = b""
-        
+
+
 default_message_pool.register_message("", "VolumeClaimTemplate", VolumeClaimTemplate)
+
 
 @dataclass(
     kw_only=True,
@@ -75,9 +79,9 @@ class K8SStack(betterproto2.Message):
     namespace: str = betterproto2.field(1, betterproto2.TYPE_STRING, repeated=False, optional=False)
 
     def __init__(
-        self,
-        *,
-        namespace: str, 
+            self,
+            *,
+            namespace: str,
     ):
         """
         :param namespace: - 
@@ -85,8 +89,10 @@ class K8SStack(betterproto2.Message):
         self.namespace = namespace
 
         self._unknown_fields = b""
-        
+
+
 default_message_pool.register_message("", "K8SStack", K8SStack)
+
 
 @dataclass(
     kw_only=True,
@@ -95,15 +101,15 @@ default_message_pool.register_message("", "K8SStack", K8SStack)
     repr=False,
 )
 class StackTypes(betterproto2.Message):
-    k8sstack: "K8SStack | None"= betterproto2.field(1, betterproto2.TYPE_MESSAGE, optional=True, group="type")
-    thing: "VolumeClaimTemplate | None"= betterproto2.field(2, betterproto2.TYPE_MESSAGE, optional=True, group="type")
-    
+    k8sstack: "K8SStack | None" = betterproto2.field(1, betterproto2.TYPE_MESSAGE, optional=True, group="type")
+    thing: "VolumeClaimTemplate | None" = betterproto2.field(2, betterproto2.TYPE_MESSAGE, optional=True, group="type")
+
     def __init__(
-        self,
-        *,
-        
-        k8sstack: "K8SStack | None" = None,
-        thing: "VolumeClaimTemplate | None" = None, 
+            self,
+            *,
+
+            k8sstack: "K8SStack | None" = None,
+            thing: "VolumeClaimTemplate | None" = None,
     ):
         """
         """
@@ -111,8 +117,10 @@ class StackTypes(betterproto2.Message):
         self.thing = thing
 
         self._unknown_fields = b""
-        
+
+
 default_message_pool.register_message("", "StackTypes", StackTypes)
+
 
 @dataclass(
     kw_only=True,
@@ -125,10 +133,10 @@ class Stack(betterproto2.Message):
     stack: "StackTypes" = betterproto2.field(2, betterproto2.TYPE_MESSAGE, repeated=False, optional=False)
 
     def __init__(
-        self,
-        *,
-        name: str, 
-        stack: "StackTypes", 
+            self,
+            *,
+            name: str,
+            stack: "StackTypes",
     ):
         """
         :param name: - 
@@ -138,7 +146,8 @@ class Stack(betterproto2.Message):
         self.stack = stack
 
         self._unknown_fields = b""
-        
+
+
 default_message_pool.register_message("", "Stack", Stack)
 
 __all__ = (
@@ -150,4 +159,3 @@ __all__ = (
 
     "Stack"
 )
-    

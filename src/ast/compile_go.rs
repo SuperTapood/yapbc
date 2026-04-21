@@ -5,6 +5,7 @@ use crate::util::{capitalize_first, pascal_to_snake, snake_to_pascal};
 use prost::Message as ProstMessage;
 use prost_types::field_descriptor_proto::{Label, Type};
 use prost_types::{DescriptorProto, EnumDescriptorProto, EnumValueDescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
@@ -101,8 +102,17 @@ impl Field {
         } else {
             self.ptype.default_go()
         };
+
+        let parse_type = match self.ptype {
+            PType::Int32 | PType::RepeatedInt32 => "varint".to_string(),
+            _ => String::from("bytes")
+        };
+
+        let index = self.index;
+        let snake_name = self.name.clone();
+
         let struct_var = if self.maybe_types.is_none() {
-            format!("    {name}  {str_type}\n")
+            format!("    {name}  {str_type} `protobuf:\"{parse_type},{index},opt,name={snake_name},proto3\" json:\"{snake_name},omitempty\"`\n")
         } else {
             format!("    {name}  {str_type} `protobuf_oneof:\"{}\"`\n", self.name)
         };
@@ -144,7 +154,12 @@ impl Message {
         desc.name = Some(name.clone());
 
         let mut struct_code = format!(
-            "\ntype {name} struct {{\n    state         protoimpl.MessageState\n    unknownFields protoimpl.UnknownFields\n    sizeCache     protoimpl.SizeCache\n"
+            "
+type {name} struct {{
+    state protoimpl.MessageState `protogen:\"open.v1\"`
+    unknownFields protoimpl.UnknownFields
+    sizeCache     protoimpl.SizeCache
+"
         );
         let mut getters = String::new();
 
@@ -152,25 +167,17 @@ impl Message {
 
         for field in &self.fields {
             if let Some(ref nested_fields) = field.maybe_types {
-                // 1. Descriptor Logic: Register the Oneof group
                 oneof_idx = Some(desc.oneof_decl.len() as i32);
                 desc.oneof_decl.push(prost_types::OneofDescriptorProto {
                     name: Some(field.name.clone()),
                     options: None,
                 });
-
-                // 2. Struct Logic: Add the interface field to the struct
                 let pascal_name = snake_to_pascal(&field.name);
                 let interface_name = format!("is{name}_{pascal_name}");
                 struct_code.push_str(&format!("    {pascal_name}  {interface_name} `protobuf_oneof:\"{}\"`\n", field.name));
-
-                // 3. Nested Fields: Add each choice to the descriptor and generate getters
                 for nested in nested_fields {
-                    // Update the descriptor with the oneof index
                     nested.add_field_to_desc(&mut desc, false, oneof_idx);
-
-                    // Generate the Getter for this specific oneof branch
-                    let branch_name = snake_to_pascal(&nested.name); // Usually the type name
+                    let branch_name = snake_to_pascal(&nested.name);
                     let branch_type = nested.ptype.compile_go();
                     let default_val = nested.ptype.default_go();
 
@@ -183,8 +190,6 @@ func (x *{name}) Get{branch_name}() {branch_type} {{
 }}
 "));
                 }
-
-                // Generic getter for the interface itself
                 getters.push_str(&format!("
 func (x *{name}) Get{pascal_name}() {interface_name} {{
     if x != nil {{
@@ -193,9 +198,7 @@ func (x *{name}) Get{pascal_name}() {interface_name} {{
     return nil
 }}
 "));
-
             } else {
-                // Standard field logic
                 let (struct_var, getter, dep) = field.compile_go(name.clone(), &mut desc, enum_types, oneof_idx);
                 struct_code.push_str(struct_var.as_str());
                 getters.push_str(getter.as_str());
@@ -224,6 +227,7 @@ func (x *{name}) Get{pascal_name}() {interface_name} {{
 type {name}_{branch_struct_name} struct {{
     {branch_struct_name} {type_name} `protobuf:\"bytes,{index},opt,name={},proto3,oneof\"`
 }}
+
 func (*{name}_{branch_struct_name}) {is_type_name}() {{}}\n", nested.name));
                 }
             }
@@ -292,8 +296,14 @@ impl Messages {
         go_str_lines.join("\n")
     }
 
-    pub fn compile_go(&mut self, file: PathBuf, output: PathBuf, module: Option<String>) {
-        let parent = file.parent().unwrap().to_str().unwrap().strip_prefix(output.to_str().unwrap()).unwrap();
+    pub fn compile_go(&mut self, file: PathBuf, input: PathBuf, output: PathBuf, module: Option<String>) {
+        // println!("{:?}", file);
+        // println!("{:?}", file.parent().unwrap());
+        // println!("{:?}", input);
+        // println!("{:?}", file.to_str().unwrap().strip_prefix(output.to_str().unwrap()));
+        let parent = file.parent().unwrap().to_str().unwrap().strip_prefix(input.to_str().unwrap()).unwrap();
+
+        // panic!();
         if self.package.is_empty() {
             let split_parent = parent.split("\\").collect::<Vec<_>>();
             self.package = split_parent[split_parent.len() - 1].parse().unwrap();
@@ -302,8 +312,10 @@ impl Messages {
         let package = self.package.clone();
         let mut imports = String::new();
         let stem = pascal_to_snake(file.file_stem().and_then(|s| s.to_str()).unwrap());
-        let msg_types = format!("file_{stem}");
+        let msg_types = format!("file_{package}_{stem}_proto");
         let mut oneof_wrappers = String::new();
+
+        let mut used_imports = HashSet::new();
 
         for import in self.imports.clone() {
             let split = import.split("/").collect::<Vec<_>>();
@@ -313,8 +325,11 @@ impl Messages {
                 exit(1);
             }
             let mut tmp = import.clone();
-            tmp = tmp.strip_suffix(format!("/{object}").as_str()).unwrap().to_string();
-            imports.push_str(format!("    {tmp} \"{}/{tmp}\"\n", module.clone().unwrap()).as_str());
+            tmp = tmp.strip_suffix(format!("/{object}").as_str()).unwrap().to_string().strip_prefix("\"").unwrap().to_string();
+            if !used_imports.contains(&tmp) && !tmp.eq(parent.trim_start_matches("\\")) {
+                used_imports.insert(tmp.clone());
+                imports.push_str(format!("    {tmp} \"{}/{tmp}\"\n", module.clone().unwrap()).as_str());
+            }
 
             for message in &mut self.messages {
                 for field in &mut message.fields {
@@ -327,7 +342,7 @@ impl Messages {
                             let actual = type_name.split('.').last().unwrap().to_string();
                             oneof_wrappers.push_str(format!("        (*{}_{})(nil),\n", message.name, actual).as_str());
                         }
-                        oneof_wrappers.push_str("    }");
+                        oneof_wrappers.push_str("    }\n");
                     }
                 }
             }
@@ -341,8 +356,7 @@ impl Messages {
 package {package}
 
 import (
-{imports}
-	protoreflect \"google.golang.org/protobuf/reflect/protoreflect\"
+{imports}    protoreflect \"google.golang.org/protobuf/reflect/protoreflect\"
 	protoimpl \"google.golang.org/protobuf/runtime/protoimpl\"
 	reflect \"reflect\"
 	sync \"sync\"
@@ -361,6 +375,7 @@ const (
         let mut file_desc = FileDescriptorProto::default();
         file_desc.name = Some(file.to_str().unwrap().to_string());
         file_desc.syntax = Some("proto3".to_string());
+        file_desc.package = Some(self.package.clone());
 
         // Add Go package options
         let mut options = FileOptions::default();
@@ -578,10 +593,12 @@ func {msg_types}_init() {{
 }}
         ").as_str());
 
-        let mut filename = output.clone();
-        filename.push(format!(
-            "{parent}/{stem}.pb.go",
-        ));
+        let mut filename = PathBuf::new();
+        filename.push("./".to_owned() + output.as_os_str().to_str().unwrap());
+        filename.push(parent.strip_prefix("\\").unwrap());
+        filename.push(stem + ".pb.go");
+        fs::create_dir_all(filename.clone().parent().unwrap()).unwrap();
+
         fs::write(&filename, &total_code).unwrap();
     }
 }
