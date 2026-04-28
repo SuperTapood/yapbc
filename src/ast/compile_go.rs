@@ -91,7 +91,12 @@ impl Field {
         msg.field.push(field);
     }
     pub fn compile_go(&self, message: String, desc: &mut DescriptorProto, enum_types: &Vec<String>, oneof_index: Option<i32>) -> (String, String, Option<String>) {
-        let name = snake_to_pascal(&*self.name);
+        let mut c = self.name.chars();
+        let name = match c.next() {
+            None => String::new(),
+            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        };
+        let name = snake_to_pascal(&name);
         let str_type = if self.maybe_types.is_none() {
             self.ptype.compile_go()
         } else {
@@ -176,9 +181,11 @@ type {name} struct {{
                 let interface_name = format!("is{name}_{pascal_name}");
                 struct_code.push_str(&format!("    {pascal_name}  {interface_name} `protobuf_oneof:\"{}\"`\n", field.name));
                 for nested in nested_fields {
+                    println!("nested {nested:?}");
                     nested.add_field_to_desc(&mut desc, false, oneof_idx);
                     let branch_name = snake_to_pascal(&nested.name);
                     let branch_type = nested.ptype.compile_go();
+                    let btype = branch_type.trim_start_matches("*");
                     let default_val = nested.ptype.default_go();
 
                     getters.push_str(&format!("

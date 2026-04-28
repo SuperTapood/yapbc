@@ -25,7 +25,7 @@ pub fn snake_to_pascal(input: &str) -> String {
                 None => String::new(),
                 Some(first) => {
                     // Uppercase the first char, lowercase the rest, and combine
-                    first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                    first.to_uppercase().collect::<String>() + &chars.as_str()
                 }
             }
         })
