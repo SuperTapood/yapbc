@@ -58,10 +58,12 @@ pub struct Messages {
     pub messages: Vec<Message>,
     pub penums: Vec<PEnum>,
     pub imports: Vec<String>,
+    pub filename: String,
 }
 
 impl Messages {
     pub fn parse(data: String, file: String) -> Messages {
+        // println!("file {}", file);
         let successful_parse = ProtoParser::parse(Rule::messages, &data)
             .expect("unsuccessful parse")
             .next()
@@ -71,11 +73,14 @@ impl Messages {
 
         let mut messages = Vec::new();
         let mut penums = Vec::new();
-        let mut imports = Vec::new();
+        let mut maybe_imports = Vec::new();
         let mut package = String::new();
         let mut object_counter = 0;
 
         for record in inner {
+            if file == r".\common\flint_deployment.proto" {
+                println!("file {:?}", record);
+            }
             match record.as_rule() {
                 Rule::objects => {
                     let actual = record.clone().into_inner().next().unwrap();
@@ -92,10 +97,11 @@ impl Messages {
                     }
                 }
                 Rule::package => {
+                    println!("file {:?}", record);
                     package = record.into_inner().as_str().to_string();
                 }
                 Rule::import => {
-                    imports.push(record.into_inner().as_str().to_string());
+                    maybe_imports.push(record.into_inner().as_str().to_string());
                 }
                 _ => {
                     panic!("{}", format!("unrecognised rule: {:?}", record.as_rule()))
@@ -103,11 +109,30 @@ impl Messages {
             }
         }
 
+        if package.is_empty() {
+            let split_parent = file.split("\\").collect::<Vec<_>>();
+            package = split_parent[split_parent.len() - 2].parse().unwrap();
+        }
+
         if object_counter == 0 {
             println!("no messages/enums found in file {file}");
             exit(1);
         }
 
-        Messages { package, messages, penums, imports }
+        let mut imports = Vec::new();
+
+        for maybe_import in maybe_imports {
+            let split_parent = maybe_import.split("/").collect::<Vec<_>>();
+            println!("split {}", split_parent[split_parent.len() - 2].trim_start_matches("\""));
+            let import_package = split_parent[split_parent.len() - 2].parse::<String>().unwrap();
+            if import_package.trim_start_matches("\"") != package {
+                imports.push(maybe_import);
+            }
+        }
+        imports.dedup();
+
+        println!("imports {:?} package {package}", imports);
+
+        Messages { package, messages, penums, imports, filename: file.trim_start_matches(".\\").to_string().replace("\\", "/") }
     }
 }

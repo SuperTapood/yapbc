@@ -3,11 +3,11 @@ mod util;
 
 use crate::ast::message::Messages;
 use clap::{Parser, Subcommand};
-use std::collections::BTreeMap;
-use std::fs;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::process::exit;
 use std::time::Instant;
+use std::{env, fs};
 
 #[derive(Parser)]
 #[command(name = "yapbc")]
@@ -35,9 +35,11 @@ enum Commands {
         output: PathBuf,
         #[arg(short, long, value_enum)]
         /// The Language you want to compile to
-        languages: Vec<Language>,
+        language: Language,
         #[arg(short, long)]
         module: Option<String>,
+        #[arg(short, long)]
+        working_dir: Option<PathBuf>,
     },
 }
 
@@ -86,13 +88,17 @@ __all__ = ({modules})
     fs::write(&output, &code).unwrap();
 }
 
-fn compile(mut files: Vec<PathBuf>, output: PathBuf, language: Language, module: Option<String>) {
+fn compile(mut files: Vec<PathBuf>, out: PathBuf, language: Language, module: Option<String>, working_dir: Option<PathBuf>) {
     if files.is_empty() {
         println!("No files specified! Specify some using -f/--files");
         exit(1);
     }
 
-    println!("files {:?}", files);
+    if working_dir.is_some() {
+        env::set_current_dir(working_dir.unwrap()).unwrap();
+    }
+
+    let output = fs::canonicalize(&out).unwrap();
 
     match language {
         Language::Python => {
@@ -120,6 +126,7 @@ fn compile(mut files: Vec<PathBuf>, output: PathBuf, language: Language, module:
             compile_python(files_contents, output);
         }
         Language::Go => {
+            let mut msgs = HashMap::new();
             while let Some(current_path) = files.pop() {
                 let mut actual_files = Vec::new();
                 actual_files.push(current_path.clone());
@@ -143,10 +150,14 @@ fn compile(mut files: Vec<PathBuf>, output: PathBuf, language: Language, module:
                         }
                     }
                     for (file, content) in &files_contents {
-                        let mut messages = Messages::parse(content.clone(), file.to_str().unwrap().to_string());
-                        messages.compile_go(file.clone(), current_path.clone(), output.clone(), module.clone());
+                        let messages = Messages::parse(content.clone(), file.to_str().unwrap().to_string());
+                        msgs.insert(messages.filename.clone(), (file.clone(), current_path.clone(), messages.clone()));
                     }
                 }
+            }
+
+            for (_, (file, current_path, mut messages)) in msgs.clone() {
+                messages.compile_go(file.clone(), current_path.clone(), output.clone(), module.clone(), msgs.clone());
             }
         }
     }
@@ -160,12 +171,11 @@ fn main() {
         Commands::Compile {
             files,
             output,
-            languages,
+            language,
             module,
+            working_dir,
         } => {
-            for lang in languages {
-                compile(files.clone(), output.clone(), lang.clone(), module.clone())
-            }
+            compile(files.clone(), output.clone(), language.clone(), module.clone(), working_dir.clone())
         }
     }
     let duration = start.elapsed();

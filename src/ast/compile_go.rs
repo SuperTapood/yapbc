@@ -5,7 +5,7 @@ use crate::util::{capitalize_first, pascal_to_snake, snake_to_pascal};
 use prost::Message as ProstMessage;
 use prost_types::field_descriptor_proto::{Label, Type};
 use prost_types::{DescriptorProto, EnumDescriptorProto, EnumValueDescriptorProto, FieldDescriptorProto, FileDescriptorProto, FileOptions};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
@@ -17,7 +17,7 @@ impl PType {
             PType::RepeatedInt32 => { "[]int32".parse().unwrap() }
             PType::PString => { "string".parse().unwrap() }
             PType::RepeatedPString => { "[]string".parse().unwrap() }
-            PType::Custom(n) => { n.as_str().parse().unwrap() }
+            PType::Custom(n) => { format!("*{}", n.as_str()) }
             PType::RepeatedCustom(n) => format!("[]*{n}").as_str().parse().unwrap(),
             PType::Oneof => { "".parse().unwrap() }
         }
@@ -183,8 +183,10 @@ type {name} struct {{
 
                     getters.push_str(&format!("
 func (x *{name}) Get{branch_name}() {branch_type} {{
-    if x, ok := x.Get{pascal_name}().(*{name}_{branch_name}); ok {{
-        return x.{branch_name}
+    if x != nil {{
+        if x, ok := x.{pascal_name}.(*{name}_{branch_name}); ok {{
+            return x.{branch_name}
+        }}
     }}
     return {default_val}
 }}
@@ -203,6 +205,7 @@ func (x *{name}) Get{pascal_name}() {interface_name} {{
                 struct_code.push_str(struct_var.as_str());
                 getters.push_str(getter.as_str());
                 if let Some(d) = dep {
+
                     deps.push(d);
                 }
             }
@@ -237,20 +240,22 @@ func (*{name}_{branch_struct_name}) {is_type_name}() {{}}\n", nested.name));
     }
 }
 
-fn import_field(field: &mut Field, object: String, tmp: String) {
+fn import_field(field: &mut Field, object: String, tmp: String, module: &Messages) {
     if let Some(ref mut nested_fields) = field.maybe_types {
         for nested_field in nested_fields {
-            import_field(nested_field, object.clone(), tmp.clone());
+            import_field(nested_field, object.clone(), tmp.clone(), module);
         }
     }
 
-    if field.ptype.to_string() == object {
-        if field.ptype.is_nested() {
-            let actual = field.ptype.to_string();
-            if field.ptype.is_repeated() {
-                field.ptype = PType::RepeatedCustom(format!("{tmp}.{actual}"));
-            } else {
-                field.ptype = PType::Custom(format!("{tmp}.{actual}"));
+    for module_message in module.messages.clone() {
+        if field.ptype.to_string() == module_message.name.to_string() {
+            if field.ptype.is_nested() {
+                let actual = field.ptype.to_string();
+                if field.ptype.is_repeated() {
+                    field.ptype = PType::RepeatedCustom(format!("{tmp}.{actual}"));
+                } else {
+                    field.ptype = PType::Custom(format!("{tmp}.{actual}"));
+                }
             }
         }
     }
@@ -258,45 +263,31 @@ fn import_field(field: &mut Field, object: String, tmp: String) {
 
 impl Messages {
     fn generate_go_string(&self, raw_bytes: &[u8], var_name: &str) -> String {
-        let mut go_str_lines = vec![format!("const {} = \"\" +", var_name)];
-        let mut current_line = String::from("\t\"");
-
+        let mut escaped = String::from(format!("const {} = \"\" +\n    \"", var_name));
         for &b in raw_bytes {
-            match b {
-                7 => current_line.push_str("\\a"),     // Bell
-                8 => current_line.push_str("\\b"),     // Backspace
-                9 => current_line.push_str("\\t"),
-                10 => {
-                    current_line.push_str("\\n");
-                    current_line.push_str("\" +");
-                    go_str_lines.push(current_line);
-                    current_line = String::from("\t\"");
-                }
-                11 => current_line.push_str("\\v"),
-                12 => current_line.push_str("\\f"),    // Form feed
-                13 => current_line.push_str("\\r"),
-                34 => current_line.push_str("\\\""),
-                92 => current_line.push_str("\\\\"),
-                32..=126 => current_line.push(b as char),
-                _ => current_line.push_str(&format!("\\x{:02x}", b)),
+            let mut result = match b {
+                b'\n' => "\\n\" + \n    \"",
+                b'\\' => "\\\\",
+                b'\"' => "\\\"",
+                32..=126 => &*(b as char).to_string(),
+                _ => &format!("\\x{:02x}", b),
+            };
+
+            if result == "\\x09" {
+                result = "\\t";
             }
+
+            if result == "\\x08" {
+                result = "\\b";
+            }
+
+            escaped.push_str(result);
         }
 
-        if current_line != "\t\"" {
-            current_line.push('"');
-            go_str_lines.push(current_line);
-        } else {
-            if let Some(last_line) = go_str_lines.last_mut() {
-                if last_line.ends_with(" +") {
-                    last_line.truncate(last_line.len() - 2);
-                }
-            }
-        }
-
-        go_str_lines.join("\n")
+        escaped + "\""
     }
 
-    pub fn compile_go(&mut self, file: PathBuf, input: PathBuf, output: PathBuf, module: Option<String>) {
+    pub fn compile_go(&mut self, file: PathBuf, input: PathBuf, output: PathBuf, module: Option<String>, all_messages: HashMap<String, (PathBuf, PathBuf, Messages)>) {
         // println!("{:?}", file);
         // println!("{:?}", file.parent().unwrap());
         // println!("{:?}", input);
@@ -304,11 +295,8 @@ impl Messages {
         let parent = file.parent().unwrap().to_str().unwrap().strip_prefix(input.to_str().unwrap()).unwrap();
 
         // panic!();
-        if self.package.is_empty() {
-            let split_parent = parent.split("\\").collect::<Vec<_>>();
-            self.package = split_parent[split_parent.len() - 1].parse().unwrap();
-        }
-        let source_file = file.to_str().unwrap().to_string();
+        let mut source_file = file.to_str().unwrap().to_string();
+        source_file = source_file.trim_start_matches(".\\").parse().unwrap();
         let package = self.package.clone();
         let mut imports = String::new();
         let stem = pascal_to_snake(file.file_stem().and_then(|s| s.to_str()).unwrap());
@@ -318,32 +306,38 @@ impl Messages {
         let mut used_imports = HashSet::new();
 
         for import in self.imports.clone() {
+            let file = import.trim_start_matches("\"").trim_end_matches("\"");
             let split = import.split("/").collect::<Vec<_>>();
-            let object = split[split.len() - 1];
+            let object = split[split.len() - 1].trim_end_matches("\"");
             if !module.is_some() {
                 println!("cannot specify import without giving module name");
                 exit(1);
             }
-            let mut tmp = import.clone();
-            tmp = tmp.strip_suffix(format!("/{object}").as_str()).unwrap().to_string().strip_prefix("\"").unwrap().to_string();
+            let mut tmp = file.to_string();
+            tmp = tmp.strip_suffix(format!("/{object}").as_str()).unwrap().to_string().to_string();
             if !used_imports.contains(&tmp) && !tmp.eq(parent.trim_start_matches("\\")) {
                 used_imports.insert(tmp.clone());
                 imports.push_str(format!("    {tmp} \"{}/{tmp}\"\n", module.clone().unwrap()).as_str());
             }
 
+            // println!("{:?} => {:?}", file, self.package);
             for message in &mut self.messages {
                 for field in &mut message.fields {
-                    import_field(field, object.parse().unwrap(), tmp.clone());
-                    if field.maybe_types.is_some() {
-                        let index = message.index;
-                        oneof_wrappers.push_str(format!("    {msg_types}_msgTypes[{index}].OneofWrappers = []any{{\n").as_str());
-                        for field in &mut field.maybe_types.clone().unwrap() {
-                            let type_name = field.ptype.compile_go();
-                            let actual = type_name.split('.').last().unwrap().to_string();
-                            oneof_wrappers.push_str(format!("        (*{}_{})(nil),\n", message.name, actual).as_str());
-                        }
-                        oneof_wrappers.push_str("    }\n");
+                    let (_, _, module) = all_messages.get(file).unwrap();
+                    import_field(field, object.parse().unwrap(), tmp.clone(), module);
+                }
+            }
+        }
+
+        for message in &mut self.messages {
+            for field in &mut message.fields {
+                if field.maybe_types.is_some() {
+                    let index = message.index;
+                    oneof_wrappers.push_str(format!("    {msg_types}_msgTypes[{index}].OneofWrappers = []any{{\n").as_str());
+                    for field in &mut field.maybe_types.clone().unwrap() {
+                        oneof_wrappers.push_str(format!("        (*{}_{})(nil),\n", message.name, snake_to_pascal(&field.name)).as_str());
                     }
+                    oneof_wrappers.push_str("    }\n");
                 }
             }
         }
@@ -373,13 +367,14 @@ const (
         let mut go_types = String::new();
         // 1. Initialize the File Descriptor
         let mut file_desc = FileDescriptorProto::default();
-        file_desc.name = Some(file.to_str().unwrap().to_string());
+        file_desc.name = Some(source_file.to_string().replace("\\", "/"));
         file_desc.syntax = Some("proto3".to_string());
-        file_desc.package = Some(self.package.clone());
 
         // Add Go package options
         let mut options = FileOptions::default();
-        options.go_package = Some(self.package.to_string());
+        options.go_package = Some(module.unwrap() + "/" + &*self.package.to_string());
+        options.java_multiple_files = Some(true);
+        options.java_outer_classname = Some(snake_to_pascal(&stem) + "Proto");
         file_desc.options = Some(options);
         let mut message_map = std::collections::HashMap::new();
         let mut all_deps_as_indices = Vec::new();
@@ -524,9 +519,7 @@ func (x *{message_name}) ProtoReflect() protoreflect.Message {{
 func (*{message_name}) Descriptor() ([]byte, []int) {{
 	return {msg_types}_rawDescGZIP(), []int{{{i}}}
 }}
-
 {getters}
-
 ").as_str())
         }
         let total_deps_count = all_deps_as_indices.len() as i32;
@@ -536,13 +529,14 @@ func (*{message_name}) Descriptor() ([]byte, []int) {{
             dep_idxs_code.push_str(&format!("    {}, // {}: {}\n", idx, i, comment));
         }
 
-        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for method output_type\n"));
-        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for method input_type\n"));
-        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for extension type_name\n"));
-        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [1:1] is the sub-list for extension extendee\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [0:0] is the sub-list for method output_type\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [0:0] is the sub-list for method input_type\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [0:0] is the sub-list for extension type_name\n"));
+        dep_idxs_code.push_str(&format!("    {total_deps_count}, // [0:0] is the sub-list for extension extendee\n"));
         dep_idxs_code.push_str(&format!("    0, // [0:{total_deps_count}] is the sub-list for field type_name\n", ));
         let cap_msg_type = capitalize_first(&*msg_types.clone());
-        let raw_bytes = file_desc.encode_to_vec();
+        let mut raw_bytes = Vec::new();
+        file_desc.encode(&mut raw_bytes).unwrap();
         let go_code = self.generate_go_string(&raw_bytes, format!("{msg_types}_rawDesc").as_str());
         total_code.push_str(format!("\
 var {cap_msg_type} protoreflect.FileDescriptor
@@ -571,8 +565,7 @@ func {msg_types}_init() {{
 	if {cap_msg_type} != nil {{
 		return
 	}}
-{oneof_wrappers}
-	type x struct{{}}
+{oneof_wrappers}	type x struct{{}}
 	out := protoimpl.TypeBuilder{{
 		File: protoimpl.DescBuilder{{
 			GoPackagePath: reflect.TypeOf(x{{}}).PkgPath(),
@@ -594,8 +587,8 @@ func {msg_types}_init() {{
         ").as_str());
 
         let mut filename = PathBuf::new();
-        filename.push("./".to_owned() + output.as_os_str().to_str().unwrap());
-        filename.push(parent.strip_prefix("\\").unwrap());
+        filename.push(output.to_str().unwrap());
+        filename.push(parent.trim_start_matches("\\"));
         filename.push(stem + ".pb.go");
         fs::create_dir_all(filename.clone().parent().unwrap()).unwrap();
 
