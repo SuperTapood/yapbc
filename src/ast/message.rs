@@ -1,8 +1,8 @@
 use crate::ast::comments::Comments;
 use crate::ast::field::Field;
 use crate::ast::penum::PEnum;
-use pest::iterators::Pair;
 use pest::Parser;
+use pest::iterators::Pair;
 use pest_derive::Parser;
 use std::process::exit;
 
@@ -59,11 +59,11 @@ pub struct Messages {
     pub penums: Vec<PEnum>,
     pub imports: Vec<String>,
     pub filename: String,
+    pub maybe_imports: Vec<String>,
 }
 
 impl Messages {
     pub fn parse(data: String, file: String) -> Messages {
-        // println!("file {}", file);
         let successful_parse = ProtoParser::parse(Rule::messages, &data)
             .expect("unsuccessful parse")
             .next()
@@ -78,9 +78,6 @@ impl Messages {
         let mut object_counter = 0;
 
         for record in inner {
-            if file == r".\common\flint_deployment.proto" {
-                println!("file {:?}", record);
-            }
             match record.as_rule() {
                 Rule::objects => {
                     let actual = record.clone().into_inner().next().unwrap();
@@ -93,7 +90,7 @@ impl Messages {
                             penums.push(PEnum::parse(actual, object_counter));
                             object_counter = object_counter + 1;
                         }
-                        _ => panic!("we should not hit this")
+                        _ => panic!("we should not hit this"),
                     }
                 }
                 Rule::package => {
@@ -110,7 +107,7 @@ impl Messages {
         }
 
         if package.is_empty() {
-            let split_parent = file.split("\\").collect::<Vec<_>>();
+            let split_parent = file.split(std::path::MAIN_SEPARATOR).collect::<Vec<_>>();
             package = split_parent[split_parent.len() - 2].parse().unwrap();
         }
 
@@ -121,18 +118,27 @@ impl Messages {
 
         let mut imports = Vec::new();
 
-        for maybe_import in maybe_imports {
+        for maybe_import in maybe_imports.clone() {
             let split_parent = maybe_import.split("/").collect::<Vec<_>>();
-            println!("split {}", split_parent[split_parent.len() - 2].trim_start_matches("\""));
-            let import_package = split_parent[split_parent.len() - 2].parse::<String>().unwrap();
+            let import_package = split_parent[split_parent.len() - 2]
+                .parse::<String>()
+                .unwrap();
             if import_package.trim_start_matches("\"") != package {
                 imports.push(maybe_import);
             }
         }
         imports.dedup();
 
-        println!("imports {:?} package {package}", imports);
-
-        Messages { package, messages, penums, imports, filename: file.trim_start_matches(".\\").to_string().replace("\\", "/") }
+        Messages {
+            package,
+            messages,
+            penums,
+            imports,
+            maybe_imports,
+            filename: file
+                .trim_start_matches(".\\")
+                .to_string()
+                .replace("\\", "/"),
+        }
     }
 }

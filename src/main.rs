@@ -69,7 +69,7 @@ betterproto2.check_compiler_version(_COMPILER_VERSION)
 
 "
         )
-            .as_str(),
+        .as_str(),
     );
     for (filename, file) in &files {
         let messages = Messages::parse(file.to_string(), filename.to_str().unwrap().to_string());
@@ -79,16 +79,27 @@ betterproto2.check_compiler_version(_COMPILER_VERSION)
         }
     }
 
-    code.push_str(format!("\
+    code.push_str(
+        format!(
+            "\
 __all__ = ({modules})
-    ").as_str());
+    "
+        )
+        .as_str(),
+    );
 
     output.push("__init__.py");
 
     fs::write(&output, &code).unwrap();
 }
 
-fn compile(mut files: Vec<PathBuf>, out: PathBuf, language: Language, module: Option<String>, working_dir: Option<PathBuf>) {
+fn compile(
+    mut files: Vec<PathBuf>,
+    out: PathBuf,
+    language: Language,
+    module: Option<String>,
+    working_dir: Option<PathBuf>,
+) {
     if files.is_empty() {
         println!("No files specified! Specify some using -f/--files");
         exit(1);
@@ -119,7 +130,10 @@ fn compile(mut files: Vec<PathBuf>, out: PathBuf, language: Language, module: Op
                     }
                 } else {
                     if current_path.extension().unwrap() == "proto" {
-                        files_contents.insert(current_path.clone(), fs::read_to_string(&current_path).expect("Failed to read contents"));
+                        files_contents.insert(
+                            current_path.clone(),
+                            fs::read_to_string(&current_path).expect("Failed to read contents"),
+                        );
                     }
                 }
             }
@@ -146,18 +160,36 @@ fn compile(mut files: Vec<PathBuf>, out: PathBuf, language: Language, module: Op
                         }
                     } else {
                         if filename.clone().extension().unwrap() == "proto" {
-                            files_contents.insert(filename.clone(), fs::read_to_string(filename.clone()).expect("Failed to read contents"));
+                            files_contents.insert(
+                                filename.clone(),
+                                fs::read_to_string(filename.clone())
+                                    .expect("Failed to read contents"),
+                            );
                         }
                     }
                     for (file, content) in &files_contents {
-                        let messages = Messages::parse(content.clone(), file.to_str().unwrap().to_string());
-                        msgs.insert(messages.filename.clone(), (file.clone(), current_path.clone(), messages.clone()));
+                        let messages =
+                            Messages::parse(content.clone(), file.to_str().unwrap().to_string());
+                        msgs.insert(
+                            messages
+                                .filename
+                                .clone()
+                                .trim_start_matches("./")
+                                .to_string(),
+                            (file.clone(), current_path.clone(), messages.clone()),
+                        );
                     }
                 }
             }
 
             for (_, (file, current_path, mut messages)) in msgs.clone() {
-                messages.compile_go(file.clone(), current_path.clone(), output.clone(), module.clone(), msgs.clone());
+                messages.compile_go(
+                    file.clone(),
+                    current_path.clone(),
+                    output.clone(),
+                    module.clone(),
+                    msgs.clone(),
+                );
             }
         }
     }
@@ -174,9 +206,13 @@ fn main() {
             language,
             module,
             working_dir,
-        } => {
-            compile(files.clone(), output.clone(), language.clone(), module.clone(), working_dir.clone())
-        }
+        } => compile(
+            files.clone(),
+            output.clone(),
+            language.clone(),
+            module.clone(),
+            working_dir.clone(),
+        ),
     }
     let duration = start.elapsed();
     println!("done in {:?}", duration);
