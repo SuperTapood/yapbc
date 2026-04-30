@@ -44,8 +44,6 @@ impl Field {
         if next.as_rule() == Rule::default {
             default = Some(next.into_inner().as_str().parse().unwrap());
             next = record.next().unwrap();
-        } else if default.is_some() {
-            default = Some(ptype.default_python());
         }
 
         let index = next.as_str().parse::<usize>().unwrap();
@@ -92,7 +90,7 @@ impl Field {
         match record.as_rule() {
             Rule::regular_field => Field::parse_regular(record),
             Rule::oneof_field => Field::parse_oneof(record),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

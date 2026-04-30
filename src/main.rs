@@ -45,8 +45,8 @@ enum Commands {
 
 fn compile_python(files: BTreeMap<PathBuf, String>, mut output: PathBuf) {
     let files_str = files
-        .iter()
-        .map(|(f, _)| f.file_name().unwrap().to_str().unwrap())
+        .keys()
+        .map(|f| f.file_name().unwrap().to_str().unwrap())
         .collect::<Vec<&str>>()
         .join(", ");
     let mut modules = String::new();
@@ -105,8 +105,8 @@ fn compile(
         exit(1);
     }
 
-    if working_dir.is_some() {
-        env::set_current_dir(working_dir.unwrap()).unwrap();
+    if let Some(dir) = working_dir {
+        env::set_current_dir(dir).unwrap();
     }
 
     let output = fs::canonicalize(&out).unwrap();
@@ -128,13 +128,11 @@ fn compile(
                         let path = entry.expect("Failed to read entry").path();
                         files.push(path);
                     }
-                } else {
-                    if current_path.extension().unwrap() == "proto" {
-                        files_contents.insert(
-                            current_path.clone(),
-                            fs::read_to_string(&current_path).expect("Failed to read contents"),
-                        );
-                    }
+                } else if current_path.extension().unwrap() == "proto" {
+                    files_contents.insert(
+                        current_path.clone(),
+                        fs::read_to_string(&current_path).expect("Failed to read contents"),
+                    );
                 }
             }
             compile_python(files_contents, output);
@@ -158,14 +156,11 @@ fn compile(
                             let path = entry.expect("Failed to read entry").path();
                             actual_files.push(path);
                         }
-                    } else {
-                        if filename.clone().extension().unwrap() == "proto" {
-                            files_contents.insert(
-                                filename.clone(),
-                                fs::read_to_string(filename.clone())
-                                    .expect("Failed to read contents"),
-                            );
-                        }
+                    } else if filename.clone().extension().unwrap() == "proto" {
+                        files_contents.insert(
+                            filename.clone(),
+                            fs::read_to_string(filename.clone()).expect("Failed to read contents"),
+                        );
                     }
                     for (file, content) in &files_contents {
                         let messages =

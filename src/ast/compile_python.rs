@@ -90,17 +90,19 @@ impl Field {
                                          field.index,
                                          self.name,
             ));
-            field_code.push_str(format!("\n    {}", self.comments.compile_python().as_str()).as_str());
+            field_code
+                .push_str(format!("\n    {}", self.comments.compile_python().as_str()).as_str());
 
-            parameters.push_str(&format!("\n        {}: \"{} | None\" = None,", field.name, py_type.replace("\"", "")));
+            parameters.push_str(&format!(
+                "\n        {}: \"{} | None\" = None,",
+                field.name,
+                py_type.replace("\"", "")
+            ));
         }
 
         parameters.pop();
 
-        (
-            field_code,
-            parameters,
-            self.comments.oneliner_python())
+        (field_code, parameters, self.comments.oneliner_python())
     }
     pub fn compile_python(&self) -> (String, String, String) {
         if self.ptype == PType::Oneof {
@@ -108,7 +110,9 @@ impl Field {
         }
         let mut field_code = String::new();
         let (mut py_type, msg_type) = self.ptype.compile_python();
+        let mut is_default = false;
         if self.default.is_some() {
+            is_default = true;
             py_type = format!("Optional[{}]", py_type);
         }
         field_code.push_str(&format!(
@@ -118,7 +122,7 @@ impl Field {
             self.index,
             msg_type,
             capitalize_first(self.repeated.to_string().as_str()),
-            capitalize_first(self.default.is_some().to_string().as_str())
+            capitalize_first(is_default.to_string().as_str())
         ));
 
         field_code.push_str(format!("\n{}", self.comments.compile_python().as_str()).as_str());
@@ -142,10 +146,12 @@ impl PEnum {
 
         let comments = self.comments.compile_python();
 
-        format!("\
+        format!(
+            "\
 class {name}(betterproto2.Enum):
 {comments}{fields}
-")
+"
+        )
     }
 }
 
@@ -161,14 +167,12 @@ impl Message {
             let (preinit, init, comment) = f.compile_python();
             if f.maybe_types.is_none() {
                 if f.default.is_some() {
-                    variables_with_default_init.push_str(
-                        format!(
-                            "        {} = {}, \n",
-                            init,
-                            f.default.clone().unwrap().as_str()
-                        )
-                            .as_str(),
-                    );
+                    let mut def = f.default.clone().unwrap();
+                    if def == "PLACEHOLDER" {
+                        def = f.ptype.default_python();
+                    }
+                    variables_with_default_init
+                        .push_str(format!("        {} = {}, \n", init, def).as_str());
                     variables_with_default_comment.push_str(
                         format!("        :param {}: {} \n", f.name.clone(), comment).as_str(),
                     );
@@ -181,16 +185,13 @@ impl Message {
                 code.push_str(format!("    {}", preinit).as_str());
                 assignment.push_str(format!("        self.{} = {}\n", f.name, f.name).as_str());
             } else {
-                variables_with_default_init.push_str(
-                    format!(
-                        "        {}, \n",
-                        init,
-                    )
-                        .as_str(),
-                );
+                variables_with_default_init.push_str(format!("        {}, \n", init,).as_str());
                 code.push_str(format!("    {}", preinit).as_str());
                 for maybe_field in f.maybe_types.clone().unwrap() {
-                    assignment.push_str(format!("        self.{} = {}\n", maybe_field.name, maybe_field.name).as_str());
+                    assignment.push_str(
+                        format!("        self.{} = {}\n", maybe_field.name, maybe_field.name)
+                            .as_str(),
+                    );
                 }
             }
         }
@@ -240,7 +241,7 @@ impl Messages {
                     "default_message_pool.register_message(\"\", \"{}\", {})\n\n",
                     message.name, message.name
                 )
-                    .as_str(),
+                .as_str(),
             );
         }
 

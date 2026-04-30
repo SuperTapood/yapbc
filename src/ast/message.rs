@@ -84,11 +84,11 @@ impl Messages {
                     match actual.as_rule() {
                         Rule::message => {
                             messages.push(Message::parse(actual, object_counter));
-                            object_counter = object_counter + 1;
+                            object_counter += 1;
                         }
                         Rule::enumeration => {
                             penums.push(PEnum::parse(actual, object_counter));
-                            object_counter = object_counter + 1;
+                            object_counter += 1;
                         }
                         _ => panic!("we should not hit this"),
                     }

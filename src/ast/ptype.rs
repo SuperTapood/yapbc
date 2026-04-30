@@ -34,7 +34,7 @@ impl PType {
         }
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         String::from(match &self {
             PType::Int32 => "int32",
             RepeatedInt32 => "int32",
@@ -47,11 +47,7 @@ impl PType {
     }
 
     pub fn is_nested(&self) -> bool {
-        match self {
-            PType::RepeatedCustom(_) => true,
-            PType::Custom(_) => true,
-            _ => false,
-        }
+        matches!(self, PType::RepeatedCustom(_) | PType::Custom(_))
     }
 
     pub fn is_repeated(&self) -> bool {

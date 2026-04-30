@@ -417,7 +417,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yapbf"
+name = "yapbc"
 version = "0.1.0"
 dependencies = [
  "clap",
