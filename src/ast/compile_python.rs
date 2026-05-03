@@ -16,7 +16,7 @@ impl PType {
             RepeatedPString => ("List[str]".to_string(), "TYPE_STRING".to_string()),
             PType::Custom(n) => (format!("\"{n}\""), "TYPE_MESSAGE".to_string()),
             RepeatedCustom(n) => (format!("List[\"{n}\"]"), "TYPE_MESSAGE".to_string()),
-            PType::Oneof => ("oneof".to_string(), "TYPE_MESSAGE".to_string()),
+            PType::Oneof => ("oneof".to_string(), "TYPE_ONEOF".to_string()),
         }
     }
 
@@ -80,11 +80,11 @@ impl Field {
         let types = self.maybe_types.clone().unwrap();
 
         for field in types {
-            let (mut py_type, _) = field.ptype.compile_python();
+            let (mut py_type, act_type) = field.ptype.compile_python();
             if field.default.is_some() {
                 py_type = format!("Optional[{}]", py_type);
             }
-            field_code.push_str(&format!("{}: \"{} | None\"= betterproto2.field({}, betterproto2.TYPE_MESSAGE, optional=True, group=\"{}\")",
+            field_code.push_str(&format!("{}: \"{} | None\"= betterproto2.field({}, betterproto2.{act_type}, optional=True, group=\"{}\")",
                                          field.name,
                                          py_type.replace("\"", ""),
                                          field.index,
